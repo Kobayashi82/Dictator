@@ -7,3 +7,9 @@ dist/
 *.spec.bak
 *.dictado.tmp
 *.tmp
+.ruff_cache/
+
+# Notas de diseño, fuera del repo
+SPEC.md
+dictador.md
+docs/LLM.md

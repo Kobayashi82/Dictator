@@ -1,123 +1,136 @@
 # Dictador
 
-Aplicación de escritorio para Windows 10/11 para **dictar por voz a un documento**, todo en local y sin conexión
-(salvo la descarga inicial de modelos). Parakeet TDT 0.6B v3 transcribe frase a frase en la CPU y un LLM pequeño
-corrige los párrafos ya cerrados mientras sigues hablando. La idea completa está en [SPEC.md](SPEC.md) y, como
-antecedente, en [dictador.md](dictador.md).
+**English** · [Español](README.es.md)
 
-Está pensado para una **persona mayor**: una hoja blanca como la de Word, letra grande, un botón grande para hablar
-y nada más a la vista. Lo avanzado (ajustes, glosario, ver correcciones…) está en el botón **«Más»**.
+A Windows 10/11 desktop app for **dictating into a document by voice**, entirely on your own computer and offline
+(apart from the one-time model download). Parakeet TDT 0.6B v3 transcribes sentence by sentence on the CPU, and a
+small LLM corrects each finished paragraph while you keep talking. Interface and dictation in **English and
+Spanish**.
 
-## Instalación
+It is designed for **older people**: a white page like Word, large text, one big button to talk and nothing else in
+sight. Everything else (settings, glossary, reviewing corrections…) lives under the **More** button.
 
-Se reparte un único **`Instalar Dictador.exe`** (~64 MB): instala para el usuario sin pedir permisos de
-administrador, pone el icono en el escritorio y en el menú Inicio y hace que los documentos `.dictador` se abran con
-doble clic. Al abrir el programa por primera vez, un **asistente** con letra grande:
+![Dictador](docs/screenshot-en.png)
 
-1. da la bienvenida;
-2. descarga lo necesario (voz y corrector, ~2 GB) con una sola barra de progreso;
-3. prueba el micrófono («Diga: Hoy hace un día precioso»);
-4. explica el uso en tres pasos.
+## Download and install
 
-Se puede volver a ver la explicación en «Más › Ver la explicación otra vez» (o `F1`).
+Download **`Dictador-1.0-Setup.exe`** (~64 MB) from [Releases](https://github.com/Kobayashi82/Dictator/releases/latest).
 
-## Cómo funciona
+It installs for the current user without asking for administrator rights, adds icons to the desktop and Start
+menu, and makes `.dictador` documents open with a double click. The first time the app opens, a **wizard** with
+large text:
+
+1. says hello;
+2. downloads what it needs (voice and corrector, ~2 GB) with a single progress bar;
+3. tests the microphone;
+4. explains how to use it in three steps.
+
+The explanation can be shown again with **More › Help** (or `F1`).
+
+## How it works
 
 ```
-Micrófono → Silero VAD → frases (pausa corta) → Parakeet → editor
-                       → párrafo (pausa larga) → cola → LLM → salvaguarda → editor
+Microphone → Silero VAD → sentences (short pause) → Parakeet → editor
+                        → paragraph (long pause)  → queue → LLM → safeguard → editor
 ```
 
-- **Texto en vivo:** mientras hablas, lo que dices aparece en cursiva gris al final del documento (se re-transcribe
-  la frase en curso cada ~0,4 s). No hace falta esperar a ninguna pausa para verlo.
-- **Pausa corta** (0,8 s): cierra la frase, que queda fija en el párrafo.
-- **Pausa larga** (2,5 s), «punto y aparte» o `Ctrl+Intro`: cierra el párrafo y lo manda al corrector. La marca del
-  margen cambia de color: azul = corrigiendo, verde = corregido, naranja = corrección descartada, morado = editado.
-- **Poesía:** pausas propias, más cortas: 0,35 s cierra el verso (cada uno en su línea) y 1,3 s la estrofa. Si dos
-  versos llegan juntos, se separan por la puntuación que pone Parakeet.
-- Cada párrafo guarda el **texto original y el corregido**. Clic en la marca del margen (o botón derecho):
-  ver cambios, revertir al original, volver a corregir.
-- Si editas un párrafo a mano, el corrector ya no lo toca.
-- **Modos:** Prosa, Poesía, Notas/Lista y Sin corrección.
-- **Comandos de voz:** «punto y aparte», «nuevo párrafo», «nueva estrofa», «borra la última frase», «título …».
-- **Glosario** general (Ajustes) y por documento (Documento › Glosario) para nombres propios y vocabulario raro.
+- **Talk:** one tap of the button (or `F9`, configurable) starts and another stops. If you hold it down, dictation
+  stops when you let go.
+- **Live text:** while you speak, what you are saying appears in grey italics at the end of the document. No need
+  to wait for a pause to see it.
+- **Short pause** (0.8 s): closes the sentence.
+- **Long pause** (2.5 s), "new paragraph", `Ctrl+Enter` or stopping: closes the paragraph and sends it to the
+  corrector.
+- **Poetry:** its own, shorter pauses: 0.35 s closes the line (each on its own line) and 1.3 s the stanza.
+- Each paragraph keeps the **original and the corrected text**. With **More › Highlight what was corrected**, a
+  mark in the margin shows its state (blue = correcting, green = corrected, orange = correction discarded, purple =
+  edited by hand); click it (or right-click) to see the changes, revert to the original or correct it again. Once you edit a paragraph by hand, the corrector leaves it
+  alone.
+- **Modes:** Text, Poetry, List and No correction.
+- **Voice commands:** "new paragraph", "new stanza", "delete last sentence" / "scratch that", "title …". In
+  Spanish: «punto y aparte», «nuevo párrafo», «nueva estrofa», «borra la última frase», «título …».
+- **Special names and words** (glossary), general and per document, for proper names and unusual vocabulary.
+- Light and dark theme, following Windows by default.
 
-## El corrector
+## The corrector
 
-En **Herramientas › Ajustes › Corrector** se elige:
+In **More › Settings › Corrector** you download it (~1.3 GB) and choose where it runs: **Processor** or **Graphics
+card** (Vulkan). It is Qwen3.5 2B with llama-server; Dictador starts and stops the server by itself. Measured on a
+Ryzen 7 7800X3D: a 63-word paragraph in ~2 s on the processor.
 
-- **Integrado:** Qwen3.5 2B con llama-server, en la **CPU** (RAM) o en la **GPU** (Vulkan). Los dos se descargan desde
-  **Herramientas › Modelos** (≈1,3 GB) y Dictador arranca y para el servidor solo. Medido en un Ryzen 7 7800X3D:
-  un párrafo de 63 palabras en ~2 s en CPU.
-- **Servidor externo:** cualquier endpoint compatible con OpenAI (Ollama, llama-swap, llama-server, LM Studio),
-  local o en otro equipo, con URL, modelo y clave. Ver [docs/LLM.md](docs/LLM.md).
+It can also use an **external server**: any OpenAI-compatible endpoint, on this computer or another one on the
+network. It is set in `%APPDATA%\Dictador\config.json` (`llm_base_url`, `llm_model`, `llm_api_key`, with
+`managed_enabled: false`), and then it appears as a third option in Settings.
 
-**Titubeos:** al dictar uno se corrige sobre la marcha («dejaban su paso a su paso», «a las ocho, no, a las nueve»).
-Lo que vale es lo último que se dijo. Los casos claros (repeticiones sin coma, autocorrecciones con otra forma de la
-palabra, correcciones con «no», «eh», «digo»… en medio, muletillas sueltas) se arreglan por reglas antes de llamar al
-corrector, porque los modelos pequeños suelen borrar la versión buena en vez de la descartada. Las repeticiones
-idénticas con coma («que no, que no») pueden ser expresivas y se dejan a juicio del corrector. En poesía no se toca
-nada de esto. El texto original de Parakeet se guarda siempre: «Revertir» lo recupera.
+| Server | Typical base URL | Model |
+|---|---|---|
+| llama-swap | `http://localhost:8080/v1` | the entry name (see [llama-swap.yaml](docs/llama-swap.yaml)) |
+| llama-server | `http://localhost:8080/v1` | any (it serves a single model) |
+| Ollama | `http://localhost:11434/v1` | `qwen3.5-4b:latest`, etc. |
+| LM Studio | `http://localhost:1234/v1` | the identifier LM Studio shows |
 
-Una **salvaguarda** rechaza las correcciones que cambian demasiado el texto (distancia de edición, longitud, número de
-versos) y limpia los preámbulos típicos («Aquí tienes…»). Si el corrector falla o no responde, el dictado sigue y el
-párrafo se queda con el texto de Parakeet; Documento › Reintentar lo vuelve a intentar.
+For a server on another computer, replace `localhost` with its IP (Ollama needs `OLLAMA_HOST=0.0.0.0` to listen
+beyond localhost). With `llm_disable_thinking` (the default), each request carries `reasoning_effort: "none"`
+(Ollama) and `chat_template_kwargs: {"enable_thinking": false}` (llama-server); if the server rejects them, Dictador
+retries without them and adds `/no_think` to the prompt. Recommended: **Qwen3.5 2B** Q4_K_M on a modest machine,
+Qwen3.5 4B if there is room.
 
-## ¿Y los párrafos sin pausas?
+**Hesitations:** when dictating, people correct themselves on the fly ("at eight, no, at nine"). What counts is the
+last thing said. Clear cases (repetitions, self-corrections with "no", "I mean", "uh" in between, stray fillers) are
+fixed by rules before calling the corrector, because small models tend to delete the good version instead of the
+discarded one. Poetry is left untouched.
 
-Se probó a que el corrector decidiera dónde empieza cada párrafo (frase a frase, con el inicio del Quijote y sus
-párrafos reales). Qwen3.5 2B no separó ninguno; Qwen3.5 4B, uno de tres; y la probabilidad que dan a «párrafo nuevo»
-no distingue los saltos reales del resto. Con modelos pequeños no es fiable, así que los párrafos salen de la voz:
-pausa larga (ajustable), «punto y aparte» o `Ctrl+Intro`.
+A **safeguard** rejects corrections that change the text too much (edit distance, length, number of lines) and
+strips the usual preambles ("Here is…"). If the corrector fails or does not answer, dictation carries on and the
+paragraph keeps Parakeet's text; it can be retried later from **More**.
 
-## Diagnóstico
+## Files
 
-Ajustes › Dictado › «Guardar el audio de cada sesión» graba el audio y la probabilidad de voz de cada trama en
-`%LOCALAPPDATA%\Dictador\diagnostico`. Con `dictador --transcribe sesion.wav` se puede repetir el corte y la
-transcripción sin micrófono.
+- `.dictador` document (JSON): every paragraph with its original, correction and status. When reopened, dictation
+  continues at the end.
+- Save as Word (`Ctrl+E`), export to `.md` and `.txt`; import `.txt` and `.md`.
+- Recovery autosave every 60 s.
+- Models in `%LOCALAPPDATA%\Dictador\models`; settings in `%APPDATA%\Dictador\config.json`.
 
-## Archivos
+## Shortcuts
 
-- Documento `.dictador` (JSON): todos los párrafos con original, corrección y estado. Al reabrirlo, el dictado sigue al
-  final.
-- Exportar a `.docx`, `.md` y `.txt`; importar `.txt` y `.md`.
-- Autoguardado de recuperación cada 60 s.
-- Modelos en `%LOCALAPPDATA%\Dictador\models`; ajustes en `%APPDATA%\Dictador\config.json`.
-
-## Atajos
-
-| Atajo | Acción |
+| Shortcut | Action |
 |---|---|
-| `F9` | Empezar / parar de hablar |
-| `Ctrl+Intro` | Nuevo párrafo |
-| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | Nuevo / abrir / guardar |
-| `Ctrl+E` | Guardar como documento de Word |
-| `Ctrl+P` | Imprimir |
-| `Ctrl++` / `Ctrl+-` | Letra más grande / más pequeña |
-| `F1` | Ver la explicación otra vez |
-| `Ctrl+,` | Ajustes |
+| `F9` | Start / stop talking (configurable) |
+| `Ctrl+Enter` | New paragraph |
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | New / open / save |
+| `Ctrl+E` | Save as Word document |
+| `Ctrl+P` | Print |
+| `Ctrl++` / `Ctrl+-` | Larger / smaller text |
+| `F1` | Show the explanation again |
+| `Ctrl+,` | Settings |
 
-## Desarrollo
+## Development
+
+Python 3.12, PySide6 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 uv sync
-uv run dictador                          # la app
-uv run dictador --fake-asr --fake-llm    # sin micrófono, modelos ni LLM
-uv run dictador --transcribe audio.wav   # diagnóstico: VAD + Parakeet sobre un .wav de 16 kHz mono
-uv run pytest                           # tests
+uv run dictador                          # the app
+uv run dictador --fake-asr --fake-llm    # without microphone, models or LLM
+uv run dictador --transcribe audio.wav   # diagnostics: VAD + Parakeet on a 16 kHz mono .wav
+uv run pytest                            # tests
 ```
 
-## Generar el instalador
+Settings › Show advanced options › "Save the audio for diagnostics" records the audio and the per-frame voice
+probability in `%LOCALAPPDATA%\Dictador\diagnostico`, to replay it later with `--transcribe`.
+
+### Building the installer
 
 ```sh
 uv run python installer/build.py
 ```
 
-Hace `dist/Dictador/` con PyInstaller (sin modelos) y lo empaqueta con Inno Setup 6
-(`winget install JRSoftware.InnoSetup`) en `dist/Instalar Dictador.exe`. El script del instalador está en
+Builds `dist/Dictador/` with PyInstaller (without models) and packs it with Inno Setup 6
+(`winget install JRSoftware.InnoSetup`) into `dist/Instalar Dictador.exe`. The installer script is
 [installer/dictador.iss](installer/dictador.iss).
 
-## Licencias de los modelos
+## Model licences
 
-Parakeet TDT 0.6B v3 (NVIDIA, CC-BY-4.0, versión ONNX de istupakov), Silero VAD (MIT), Qwen3.5 2B (Apache-2.0,
-GGUF de unsloth), llama.cpp (MIT).
+Parakeet TDT 0.6B v3 (NVIDIA, CC-BY-4.0, ONNX version by istupakov), Silero VAD (MIT), Qwen3.5 2B (Apache-2.0,
+GGUF by unsloth), llama.cpp (MIT).
