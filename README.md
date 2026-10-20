@@ -36,6 +36,13 @@ En **Herramientas › Ajustes › Corrector** se elige:
 - **Servidor externo:** cualquier endpoint compatible con OpenAI (Ollama, llama-swap, llama-server, LM Studio),
   local o en otro equipo, con URL, modelo y clave. Ver [docs/LLM.md](docs/LLM.md).
 
+**Titubeos:** al dictar uno se corrige sobre la marcha («dejaban su paso a su paso», «a las ocho, no, a las nueve»).
+Lo que vale es lo último que se dijo. Los casos claros (repeticiones sin coma, autocorrecciones con otra forma de la
+palabra, correcciones con «no», «eh», «digo»… en medio, muletillas sueltas) se arreglan por reglas antes de llamar al
+corrector, porque los modelos pequeños suelen borrar la versión buena en vez de la descartada. Las repeticiones
+idénticas con coma («que no, que no») pueden ser expresivas y se dejan a juicio del corrector. En poesía no se toca
+nada de esto. El texto original de Parakeet se guarda siempre: «Revertir» lo recupera.
+
 Una **salvaguarda** rechaza las correcciones que cambian demasiado el texto (distancia de edición, longitud, número de
 versos) y limpia los preámbulos típicos («Aquí tienes…»). Si el corrector falla o no responde, el dictado sigue y el
 párrafo se queda con el texto de Parakeet; Documento › Reintentar lo vuelve a intentar.

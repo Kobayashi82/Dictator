@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dictado.llm.disfluency import repair
+
 _COMMON = (
     "El texto viene de un reconocedor de voz en español. "
     "Devuelve SOLO el texto corregido: sin comillas, sin explicaciones, sin encabezados y sin repetir el contexto."
@@ -60,7 +62,16 @@ def build_messages(mode: str, target: str, context: list[str], glossary: list[st
             "Contexto anterior (YA corregido; NO lo modifiques ni lo devuelvas, es solo para entender el texto):\n"
             + "\n\n".join(context)
         )
+    hints = []
+    if mode != "poesia":
+        # Los titubeos claros se arreglan antes (los modelos pequeños los arreglan al revés); los dudosos se señalan.
+        target, hints = repair(target)
     parts.append("Texto a corregir:\n" + target)
+    if hints:
+        parts.append(
+            "Posibles repeticiones en ese texto. Si son involuntarias, deja solo la última; si son expresivas, "
+            "déjalas:\n" + "\n".join(f"«{h.text}» → «{h.fix}»" for h in hints)
+        )
     return [{"role": "system", "content": system}, {"role": "user", "content": "\n\n---\n\n".join(parts)}]
 
 
