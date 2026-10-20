@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     from dictador.ui.theme import apply_theme
 
     app.setFont(style.ui_font(12))
-    # Por defecto, claro como una hoja de Word, sea cual sea el tema de Windows (se cambia en Ajustes).
+    # Por defecto, el tema de Windows (claro u oscuro); se cambia en Ajustes.
     apply_theme(settings.theme)
 
     window = MainWindow(settings, fake_asr=args.fake_asr, fake_llm=args.fake_llm)

@@ -52,7 +52,7 @@ class Settings:
     input_device: str = ""  # nombre del micrófono; vacío = predeterminado
     autosave_s: int = 60
     font_size: int = 18
-    theme: str = "claro"  # claro | oscuro | sistema
+    theme: str = "sistema"  # claro | oscuro | sistema (el de Windows)
     language: str = ""  # es | en: interfaz y dictado; vacío = el de Windows
     document_italic: bool = True  # el texto en cursiva, como lo que aparece mientras se habla
     onboarding_done: bool = False  # el asistente de la primera vez ya se completó
