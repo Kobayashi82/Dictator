@@ -293,13 +293,16 @@ class MicTestPage(_Page):
 
 
 class HowToPage(_Page):
-    def __init__(self):
+    def __init__(self, hold: bool = False):
         super().__init__(style.ICON_IDEA, "WARNING", "Así de fácil", "", badge=76)
         self.text.hide()
         steps = [
-            (style.ICON_MIC, "Pulse «Empezar a hablar» y hable con normalidad.\nVerá aparecer lo que dice."),
+            (style.ICON_MIC, "Mantenga pulsado el botón (o la tecla F9)\nmientras habla. Al soltarlo, para." if hold
+             else "Pulse «Empezar a hablar» (o la tecla F9)\ny hable con normalidad. Verá aparecer lo que dice."),
             (style.ICON_ENTER, "Para empezar un párrafo nuevo, pulse «Nuevo párrafo»,\nhaga una pausa larga o diga «punto y aparte»."),
-            (style.ICON_SAVE, "Cuando termine, pulse «Parar» y después «Guardar».\nLas faltas se corrigen solas."),
+            (style.ICON_SAVE, ("Cuando termine, pulse «Guardar»." if hold
+                               else "Cuando termine, pulse «Parar» y después «Guardar».")
+             + "\nLas faltas se corrigen solas."),
         ]
         for i, (icon, text) in enumerate(steps, 1):
             card = QFrame()
@@ -354,9 +357,9 @@ class Onboarding(QDialog):
         )
         done.finish()
         if intro_only:
-            self.pages = [HowToPage(), done]
+            self.pages = [HowToPage(window.settings.push_to_talk), done]
         else:
-            self.pages = [welcome, DownloadPage(self), MicTestPage(self), HowToPage(), done]
+            self.pages = [welcome, DownloadPage(self), MicTestPage(self), HowToPage(window.settings.push_to_talk), done]
 
         self.stack = QStackedWidget()
         for page in self.pages:

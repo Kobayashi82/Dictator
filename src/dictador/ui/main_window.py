@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QPropertyAnimation, QRect, QSize, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QKeySequence, QLinearGradient, QPainter, QTextDocument
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -39,6 +40,7 @@ MODE_OPTIONS = [
     ("ninguno", "Sin corregir", "Escribe exactamente lo que dice, sin corregir nada."),
 ]
 PAGE_WIDTH = 900
+HOLD_TAIL_MS = 300  # al soltar en «mantener pulsado», lo que se sigue escuchando
 
 
 def documents_dir() -> Path:
@@ -196,7 +198,10 @@ class MainWindow(QMainWindow):
 
         self._build_actions()
         self.canvas = _Canvas(self.editor, self)
-        self.canvas.mic.clicked.connect(self.toggle_dictation)
+        self._held = False  # botón o F9 pulsados en el modo «mantener pulsado»
+        self.canvas.mic.clicked.connect(self._mic_clicked)
+        self.canvas.mic.pressed.connect(self._hold_pressed)
+        self.canvas.mic.released.connect(self._hold_released)
         self.canvas.paragraph.clicked.connect(self.new_paragraph)
         root = QWidget(self)
         layout = QVBoxLayout(root)
@@ -205,7 +210,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_header())
         layout.addWidget(self.canvas, 1)
         self.setCentralWidget(root)
-        self._refresh_status()
+        QApplication.instance().installEventFilter(self)  # soltar F9 en «mantener pulsado», esté donde esté el foco
+        self._apply_hold_mode()
 
         self.model.modified_changed.connect(lambda _m: self._update_title())
         self.model.reset.connect(self._refresh_status)
@@ -233,7 +239,8 @@ class MainWindow(QMainWindow):
         return act
 
     def _build_actions(self) -> None:
-        self.act_dictate = self._action("Empezar o parar de hablar", self.toggle_dictation, "F9")
+        self.act_dictate = self._action("Empezar o parar de hablar", self._dictate_key, "F9")
+        self.act_dictate.setAutoRepeat(False)  # mantener F9 no debe arrancar y parar sin fin
         self.act_paragraph = self._action("Nuevo párrafo", self.new_paragraph, "Ctrl+Return")
         self.act_new = self._action("Documento nuevo", self.file_new, QKeySequence.StandardKey.New)
         self.act_open = self._action("Abrir…", self.file_open, QKeySequence.StandardKey.Open)
@@ -319,12 +326,13 @@ class MainWindow(QMainWindow):
 
     def _refresh_status(self) -> None:
         state = self.canvas.mic.state
+        hold = self.settings.push_to_talk
         if state == "loading":
             text = "Preparando el micrófono…"
         elif state == "listening":
-            text = "Le escucho. Hable con normalidad."
+            text = "Le escucho. Suelte el botón al terminar." if hold else "Le escucho. Hable con normalidad."
         elif not any(p.text.strip() for p in self.model.paragraphs):
-            text = "Pulse el botón y empiece a hablar"
+            text = "Mantenga pulsado el botón mientras habla" if hold else "Pulse el botón y empiece a hablar"
         else:
             text = ""
         self.canvas.set_status(text)
@@ -333,14 +341,62 @@ class MainWindow(QMainWindow):
 
     def toggle_dictation(self) -> None:
         if self.engine.running:
-            self.engine.stop()
-            self.canvas.mic.set_state("idle")
+            self.stop_dictation()
         else:
-            if not self.ensure_models():
-                return
-            self.engine.set_mode(self.model.mode)
-            self.engine.start()
-            self.canvas.mic.set_state("loading")
+            self.start_dictation()
+
+    def start_dictation(self) -> None:
+        if self.engine.running or not self.ensure_models():
+            return
+        self.engine.set_mode(self.model.mode)
+        self.engine.start()
+        self.canvas.mic.set_state("loading")
+        self._refresh_status()
+
+    def stop_dictation(self) -> None:
+        if not self.engine.running:
+            return
+        self.engine.stop()
+        self.canvas.mic.set_state("idle")
+        self._refresh_status()
+
+    # -- un toque para empezar y otro para parar, o hablar mientras se mantiene pulsado ------------------------------
+
+    def _mic_clicked(self) -> None:
+        if not self.settings.push_to_talk:
+            self.toggle_dictation()
+
+    def _dictate_key(self) -> None:
+        """F9: como el botón (al pulsar; al soltar lo atiende eventFilter)."""
+        if self.settings.push_to_talk:
+            self._hold_pressed()
+        else:
+            self.toggle_dictation()
+
+    def _hold_pressed(self) -> None:
+        if self.settings.push_to_talk:
+            self._held = True
+            self.start_dictation()
+
+    def _hold_released(self) -> None:
+        if self.settings.push_to_talk and self._held:
+            self._held = False
+            # Un momento más de micrófono: la última palabra suele acabar justo al soltar.
+            QTimer.singleShot(HOLD_TAIL_MS, lambda: not self._held and self.stop_dictation())
+
+    def eventFilter(self, obj, event) -> bool:
+        if (event.type() == event.Type.KeyRelease and event.key() == Qt.Key.Key_F9
+                and not event.isAutoRepeat()):
+            self._hold_released()
+        return super().eventFilter(obj, event)
+
+    def _apply_hold_mode(self) -> None:
+        hold = self.settings.push_to_talk
+        self.canvas.mic.hold_mode = hold
+        self.canvas.mic.setToolTip(
+            "Mantenga pulsado mientras habla (o mantenga la tecla F9)" if hold else "Empezar o parar de hablar  (F9)"
+        )
+        self.canvas.mic.update()
         self._refresh_status()
 
     def ensure_models(self) -> bool:
@@ -841,6 +897,7 @@ class MainWindow(QMainWindow):
         self.editor.italic = self.settings.document_italic
         self.editor.set_text_font(style.DOCUMENT_FONT, self.settings.font_size)
         apply_theme(self.settings.theme)
+        self._apply_hold_mode()
         self._autosave.start(max(10, self.settings.autosave_s) * 1000)
         self.engine.set_mode(self.model.mode)  # las pausas se aplican en caliente
         self.configure_llm()
@@ -857,6 +914,7 @@ class MainWindow(QMainWindow):
         if not self.maybe_save():
             event.ignore()
             return
+        QApplication.instance().removeEventFilter(self)
         self.engine.shutdown()
         self.corrector.shutdown()
         self._stop_server()

@@ -221,6 +221,10 @@ class SettingsDialog(QDialog):
             pass
         self.device.setCurrentIndex(max(0, self.device.findData(s.input_device)))
         self._option(card, "Micrófono", "", self.device, below=True)
+        self.push_to_talk = Switch(s.push_to_talk)
+        self._option(card, "Hablar solo mientras mantengo pulsado",
+                     "El botón (o F9) graba mientras lo mantiene pulsado y para al soltarlo. Si está apagado, "
+                     "un toque empieza y otro para.", self.push_to_talk)
         self._pause_start = _closest(s.long_pause_ms, PARAGRAPH_PAUSES)
         self.paragraph_pause = SegmentedControl(PARAGRAPH_PAUSES)
         self.paragraph_pause.set_current(self._pause_start, animate=False)
@@ -419,6 +423,7 @@ class SettingsDialog(QDialog):
             long_pause_ms=max(long_pause, self.short_pause.value() + 200),
             live_text=self.live_text.isChecked(),
             voice_commands=self.voice_commands.isChecked(),
+            push_to_talk=self.push_to_talk.isChecked(),
             managed_enabled=s.managed_enabled if where == self._where_start else where != "externo",
             managed_device=where if where != "externo" else s.managed_device,
             autosave_s=self.autosave.value(),

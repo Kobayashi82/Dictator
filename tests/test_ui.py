@@ -164,3 +164,42 @@ def test_stop_closes_paragraph_and_corrects_it(app, window):
 
 def test_no_drag_and_drop_inside_the_page(window):
     assert not window.editor.acceptDrops() and not window.editor.viewport().acceptDrops()
+
+
+def test_hold_to_talk_with_button_and_f9(app, window):
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+
+    mic = window.canvas.mic
+    # Por defecto: un toque empieza y otro para; pulsar y soltar por sí solos no hacen nada.
+    mic.pressed.emit()
+    mic.released.emit()
+    pump(app, 0.4)
+    assert not window.engine.running
+
+    window.settings.push_to_talk = True
+    window._apply_hold_mode()
+    mic.pressed.emit()
+    assert window.engine.running
+    mic.clicked.emit()  # el clic que acompaña al soltar no debe volver a arrancar ni parar
+    mic.released.emit()
+    assert window.engine.running  # sigue un momento para no cortar la última palabra
+    pump(app, 0.6)
+    assert not window.engine.running
+
+    window.act_dictate.trigger()  # F9 pulsada
+    assert window.engine.running
+    app.sendEvent(window, QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier, "", True))
+    pump(app, 0.6)
+    assert window.engine.running  # una repetición automática de la tecla no es soltarla
+    app.sendEvent(window, QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier))
+    pump(app, 0.6)
+    assert not window.engine.running
+
+
+def test_f9_is_mentioned(window):
+    from dictador.ui.onboarding import Onboarding
+
+    assert "F9" in window.canvas.mic.toolTip()
+    howto = Onboarding(window, intro_only=True).pages[0]
+    assert any("F9" in label.text() for label in howto.findChildren(type(howto.title)))
