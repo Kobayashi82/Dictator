@@ -147,3 +147,20 @@ def test_custom_prompt_reaches_the_corrector(window):
     p = window.model.append_sentence("hola", "prosa")
     window.model.close_paragraph(correct=True)
     assert jobs and jobs[0].pid == p.id and jobs[0].prompt == "Instrucciones propias."
+
+
+def test_stop_closes_paragraph_and_corrects_it(app, window):
+    window.toggle_dictation()
+    deadline = time.monotonic() + 10
+    while not window.model.paragraphs and time.monotonic() < deadline:
+        pump(app, 0.05)
+    assert window.model.paragraphs and window.model.paragraphs[-1].status == "dictating"
+    window.toggle_dictation()  # «Parar», a mitad de párrafo
+    deadline = time.monotonic() + 10
+    while window.model.paragraphs[-1].status != "corrected" and time.monotonic() < deadline:
+        pump(app, 0.05)
+    assert window.model.paragraphs[-1].status == "corrected"
+
+
+def test_no_drag_and_drop_inside_the_page(window):
+    assert not window.editor.acceptDrops() and not window.editor.viewport().acceptDrops()

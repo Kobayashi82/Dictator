@@ -253,6 +253,8 @@ class DictationEngine(QObject):
             for event in seg.flush():
                 if isinstance(event, Sentence):
                     self._enqueue(event.audio)
+            # Parar cierra el párrafo (y lo manda a corregir) detrás de la última frase, cuando esta se transcriba.
+            self._enqueue(_BREAK)
             if recorder is not None:
                 recorder.close()
                 self.recording_saved.emit(str(recorder.wav_path))
@@ -281,6 +283,7 @@ class DictationEngine(QObject):
                 self._enqueue(np.zeros(1, dtype=np.float32))
                 if count % 4 == 0:
                     self._enqueue(_BREAK)
+        self._enqueue(_BREAK)  # como con el micrófono: parar cierra el párrafo
         self.level.emit(0.0)
         self.state.emit("parado")
 

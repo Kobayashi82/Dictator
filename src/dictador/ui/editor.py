@@ -96,6 +96,10 @@ class DictationEditor(QTextEdit):
         self._flash.valueChanged.connect(self._paint_flash)
 
         self.setAcceptRichText(False)
+        # Sin arrastrar y soltar dentro de la hoja: un clic poco firme movía trozos de texto (un espacio de una
+        # palabra a otra) sin que se notara.
+        self.setAcceptDrops(False)
+        self.viewport().setAcceptDrops(False)
         self.setTabChangesFocus(False)
         self.document().setDocumentMargin(MARGIN)
         self.setMouseTracking(True)
