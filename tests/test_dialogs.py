@@ -112,3 +112,20 @@ def test_settings_custom_prompt_edit_and_restore(app):
     dialog.prompt_reset.click()
     assert dialog.prompt.toPlainText() == PRESETS["poesia"]
     assert dialog.result_settings().custom_prompts == {"prosa": "Corrige como un profesor de lengua."}
+
+
+def test_settings_dictate_key(app):
+    from PySide6.QtGui import QKeySequence
+
+    from dictador.ui.settings import SettingsDialog
+
+    dialog = SettingsDialog(Settings(), taken={"Ctrl+S": "Guardar"})
+    dialog.dictate_key.setKeySequence(QKeySequence("A"))
+    dialog._key_chosen()
+    assert not dialog.key_problem.isHidden() and dialog.result_settings().dictate_key == "F9"
+    dialog.dictate_key.setKeySequence(QKeySequence("Ctrl+S"))
+    dialog._key_chosen()
+    assert "Guardar" in dialog.key_problem.text() and dialog.result_settings().dictate_key == "F9"
+    dialog.dictate_key.setKeySequence(QKeySequence("F8"))
+    dialog._key_chosen()
+    assert dialog.key_problem.isHidden() and dialog.result_settings().dictate_key == "F8"

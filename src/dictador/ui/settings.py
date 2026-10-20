@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
@@ -33,6 +34,27 @@ FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 36)
 PARAGRAPH_PAUSES = [("1800", "Corta", "Unos 2 segundos de silencio"), ("2500", "Normal", "Unos 2,5 segundos"),
                     ("4000", "Larga", "Unos 4 segundos")]
 PROMPT_MODES = [("prosa", "Modo Texto"), ("poesia", "Modo Poesía"), ("notas", "Modo Lista")]
+
+
+_SAFE_KEYS = {Qt.Key.Key_Pause, Qt.Key.Key_ScrollLock, Qt.Key.Key_Insert}
+
+
+def key_problem(seq: QKeySequence, taken: dict[str, str]) -> str:
+    """Por qué no vale esa tecla para hablar (vacío si vale)."""
+    if seq.isEmpty():
+        return "No se ha elegido ninguna tecla."
+    combo = seq[0]
+    key, mods = combo.key(), combo.keyboardModifiers()
+    with_modifier = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
+                                 | Qt.KeyboardModifier.MetaModifier))
+    function_key = Qt.Key.Key_F1.value <= key.value <= Qt.Key.Key_F35.value
+    if not (with_modifier or function_key or key in _SAFE_KEYS):
+        return ("Esa tecla escribe en el documento. Elija una tecla de función (F2…F12) "
+                "o una combinación con Ctrl o Alt.")
+    used = taken.get(seq.toString(QKeySequence.SequenceFormat.PortableText))
+    if used:
+        return f"Esa tecla ya sirve para «{used}». Elija otra."
+    return ""
 
 
 def _closest(value: int, options: list[tuple[str, str, str]]) -> str:
@@ -107,8 +129,10 @@ class _Stepper(QWidget):
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: Settings, parent=None, fake_llm: bool = False):
+    def __init__(self, settings: Settings, parent=None, fake_llm: bool = False, taken: dict[str, str] | None = None):
+        """`taken`: atajos que ya usa el programa (texto → nombre), para no repetirlos en la tecla de hablar."""
         super().__init__(parent)
+        self._taken = taken or {}
         self.setWindowTitle("Ajustes")
         self.resize(780, 820)
         self._original = settings
@@ -221,10 +245,29 @@ class SettingsDialog(QDialog):
             pass
         self.device.setCurrentIndex(max(0, self.device.findData(s.input_device)))
         self._option(card, "Micrófono", "", self.device, below=True)
-        self.push_to_talk = Switch(s.push_to_talk)
-        self._option(card, "Hablar solo mientras mantengo pulsado",
-                     "El botón (o F9) graba mientras lo mantiene pulsado y para al soltarlo. Si está apagado, "
-                     "un toque empieza y otro para.", self.push_to_talk)
+        self._dictate_key = s.dictate_key
+        self.dictate_key = QKeySequenceEdit(QKeySequence(s.dictate_key))
+        self.dictate_key.setMaximumSequenceLength(1)
+        self.dictate_key.setFixedWidth(150)
+        self.dictate_key.editingFinished.connect(self._key_chosen)
+        key_reset = QPushButton("Restaurar")
+        key_reset.setProperty("small", True)
+        key_reset.setToolTip("Volver a F9")
+        key_reset.clicked.connect(lambda: (self.dictate_key.setKeySequence(QKeySequence("F9")), self._key_chosen()))
+        key_row = QWidget()
+        row = QHBoxLayout(key_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.dictate_key)
+        row.addWidget(key_reset)
+        self._option(card, "Tecla para hablar",
+                     "Pulse en la casilla y luego la tecla. Un toque empieza y otro para; si la mantiene pulsada, "
+                     "para al soltarla.", key_row)
+        self.key_problem = QLabel()
+        self.key_problem.setFont(style.ui_font(11.5))
+        self.key_problem.setProperty("warning", True)
+        self.key_problem.setWordWrap(True)
+        self.key_problem.hide()
+        card.addWidget(self.key_problem)
         self._pause_start = _closest(s.long_pause_ms, PARAGRAPH_PAUSES)
         self.paragraph_pause = SegmentedControl(PARAGRAPH_PAUSES)
         self.paragraph_pause.set_current(self._pause_start, animate=False)
@@ -358,6 +401,16 @@ class SettingsDialog(QDialog):
         self.advanced.setVisible(show)
         self.more.setText("Ocultar las opciones avanzadas" if show else "Mostrar las opciones avanzadas")
 
+    def _key_chosen(self) -> None:
+        seq = self.dictate_key.keySequence()
+        problem = key_problem(seq, self._taken)
+        if problem:
+            self.dictate_key.setKeySequence(QKeySequence(self._dictate_key))  # se queda la que había
+        else:
+            self._dictate_key = seq.toString(QKeySequence.SequenceFormat.PortableText)
+        self.key_problem.setText(problem)
+        self.key_problem.setVisible(bool(problem))
+
     def _show_prompt(self) -> None:
         self._prompts[self._prompt_shown] = self.prompt.toPlainText()
         self._prompt_shown = self.prompt_mode.currentData()
@@ -423,7 +476,7 @@ class SettingsDialog(QDialog):
             long_pause_ms=max(long_pause, self.short_pause.value() + 200),
             live_text=self.live_text.isChecked(),
             voice_commands=self.voice_commands.isChecked(),
-            push_to_talk=self.push_to_talk.isChecked(),
+            dictate_key=self._dictate_key,
             managed_enabled=s.managed_enabled if where == self._where_start else where != "externo",
             managed_device=where if where != "externo" else s.managed_device,
             autosave_s=self.autosave.value(),

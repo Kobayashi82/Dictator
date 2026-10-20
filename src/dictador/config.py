@@ -57,7 +57,7 @@ class Settings:
     document_italic: bool = True  # el texto en cursiva, como lo que aparece mientras se habla
     onboarding_done: bool = False  # el asistente de la primera vez ya se completó
     voice_commands: bool = True
-    push_to_talk: bool = False  # se habla mientras se mantiene pulsado el botón (o F9); si no, un toque y otro
+    dictate_key: str = "F9"  # tecla para empezar y parar de hablar (mantenida, para al soltarla)
     recent_files: list[str] = field(default_factory=list)
 
     # Segmentación

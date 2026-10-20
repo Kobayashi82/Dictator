@@ -166,40 +166,81 @@ def test_no_drag_and_drop_inside_the_page(window):
     assert not window.editor.acceptDrops() and not window.editor.viewport().acceptDrops()
 
 
-def test_hold_to_talk_with_button_and_f9(app, window):
+def _release_key(app, window, autorepeat=False):
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
 
+    app.sendEvent(window, QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier, "",
+                                    autorepeat))
+
+
+def test_tap_toggles_and_hold_stops_on_release(app, window, monkeypatch):
+    import dictador.ui.main_window as mw
+
     mic = window.canvas.mic
-    # Por defecto: un toque empieza y otro para; pulsar y soltar por sí solos no hacen nada.
+    # Toque corto en el botón: empieza; otro toque: para.
     mic.pressed.emit()
     mic.released.emit()
-    pump(app, 0.4)
-    assert not window.engine.running
-
-    window.settings.push_to_talk = True
-    window._apply_hold_mode()
+    pump(app, 0.5)
+    assert window.engine.running
     mic.pressed.emit()
-    assert window.engine.running
-    mic.clicked.emit()  # el clic que acompaña al soltar no debe volver a arrancar ni parar
     mic.released.emit()
-    assert window.engine.running  # sigue un momento para no cortar la última palabra
-    pump(app, 0.6)
     assert not window.engine.running
+    pump(app, 0.3)
 
-    window.act_dictate.trigger()  # F9 pulsada
+    # Toque corto en F9: igual.
+    window.act_dictate.trigger()
+    _release_key(app, window)
+    pump(app, 0.5)
     assert window.engine.running
-    app.sendEvent(window, QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier, "", True))
+    window.act_dictate.trigger()
+    _release_key(app, window)
+    assert not window.engine.running
+    pump(app, 0.3)
+
+    # Mantener F9: al soltar, para (tras un momento para la última palabra).
+    monkeypatch.setattr(mw, "HOLD_MS", {"key": 50, "button": 50})
+    window.act_dictate.trigger()
+    pump(app, 0.1)
+    _release_key(app, window, autorepeat=True)  # la repetición automática de la tecla no es soltarla
+    pump(app, 0.5)
+    assert window.engine.running
+    _release_key(app, window)
+    assert window.engine.running
     pump(app, 0.6)
-    assert window.engine.running  # una repetición automática de la tecla no es soltarla
-    app.sendEvent(window, QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_F9, Qt.KeyboardModifier.NoModifier))
+    assert not window.engine.running
+
+    # Mantener el botón: igual.
+    mic.pressed.emit()
+    pump(app, 0.1)
+    mic.released.emit()
     pump(app, 0.6)
     assert not window.engine.running
 
 
-def test_f9_is_mentioned(window):
-    from dictador.ui.onboarding import Onboarding
+def test_dictate_key_can_be_changed(app, window):
+    from PySide6.QtGui import QKeySequence
 
     assert "F9" in window.canvas.mic.toolTip()
+    window.settings.dictate_key = "Ctrl+D"
+    window.apply_dictate_key()
+    assert window.act_dictate.shortcut() == QKeySequence("Ctrl+D")
+    assert "Ctrl+D" in window.canvas.mic.toolTip()
+    from dictador.ui.onboarding import Onboarding
+
     howto = Onboarding(window, intro_only=True).pages[0]
-    assert any("F9" in label.text() for label in howto.findChildren(type(howto.title)))
+    assert any("Ctrl+D" in label.text() for label in howto.findChildren(type(howto.title)))
+
+
+def test_dictate_key_rules(app, window):
+    from PySide6.QtGui import QKeySequence
+
+    from dictador.ui.settings import key_problem
+
+    taken = window.taken_shortcuts()
+    assert key_problem(QKeySequence("F8"), taken) == ""
+    assert key_problem(QKeySequence("Ctrl+D"), taken) == ""
+    assert "escribe" in key_problem(QKeySequence("A"), taken)
+    assert "escribe" in key_problem(QKeySequence("Space"), taken)
+    assert "Guardar" in key_problem(QKeySequence("Ctrl+S"), taken)
+    assert "explicación" in key_problem(QKeySequence("F1"), taken)

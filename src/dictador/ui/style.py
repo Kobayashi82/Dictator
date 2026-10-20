@@ -215,6 +215,7 @@ def stylesheet() -> str:
     QLabel[soft="true"] {{ color: {c['TEXT_SOFT']}; }}
     QLabel[heading="true"] {{ color: {c['TEXT_SOFT']}; font-weight: 600; }}
     QLabel[ok="true"] {{ color: {c['SUCCESS']}; }}
+    QLabel[warning="true"] {{ color: {c['WARNING']}; }}
     QLabel[accent="true"] {{ color: {c['ACCENT']}; }}
     QLabel[number="true"], QFrame#card QLabel[number="true"] {{
         background: {c['ACCENT']}; color: white; border-radius: 20px;

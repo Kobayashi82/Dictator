@@ -68,7 +68,6 @@ class MicButton(QAbstractButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._compact = compact
-        self.hold_mode = False  # «mantener pulsado para hablar»: cambian los textos
         self._state = "idle"  # idle | listening | loading
         self._red = 0.0  # 0 azul … 1 rojo (animado)
         self._hover = 0.0
@@ -176,9 +175,9 @@ class MicButton(QAbstractButton):
         if self._state == "loading":
             label, icon = "Preparando…", None
         elif self._state == "listening":
-            label, icon = ("Suelte para parar" if self.hold_mode else "Parar"), style.ICON_STOP
+            label, icon = "Parar", style.ICON_STOP
         else:
-            label, icon = ("Mantenga y hable" if self.hold_mode else "Empezar a hablar"), style.ICON_MIC
+            label, icon = "Empezar a hablar", style.ICON_MIC
         text_font = style.ui_font(16 if self._compact else 18, QFont.Weight.DemiBold)
         icon_size = 20 if self._compact else 22
         p.setFont(text_font)
