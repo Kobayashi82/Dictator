@@ -22,6 +22,7 @@ class CorrectionJob:
     glossary: list[str] = field(default_factory=list)
     max_distance: float = 0.2
     max_length_change: float = 0.25
+    max_removed: float = 0.35
 
 
 class CorrectionQueue(QObject):
@@ -120,7 +121,9 @@ class CorrectionQueue(QObject):
             try:
                 messages = build_messages(job.mode, job.raw, job.context, job.glossary)
                 output = client.complete(messages, max_tokens_for(job.raw, job.mode))
-                result = guard.validate(job.raw, output, job.mode, job.max_distance, job.max_length_change)
+                result = guard.validate(
+                    job.raw, output, job.mode, job.max_distance, job.max_length_change, job.max_removed
+                )
                 if result.ok:
                     corrected = result.text
                 else:

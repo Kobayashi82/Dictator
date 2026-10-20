@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import difflib
 import re
+import unicodedata
 from dataclasses import dataclass
 
 _THINK = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
@@ -88,12 +90,47 @@ def _normalize(text: str, mode: str) -> str:
     return text
 
 
+_WORD = re.compile(r"\w+")
+
+
+def _fold_words(text: str) -> list[str]:
+    text = unicodedata.normalize("NFD", text.lower())
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    return _WORD.findall(text)
+
+
+def _similar(a: str, b: str) -> bool:
+    """La misma palabra mal transcrita («esperava» / «esperaba», «asombra» / «asomaban»)."""
+    longest = max(len(a), len(b))
+    return longest > 0 and 1 - levenshtein(a, b) / longest >= 0.6
+
+
+def word_changes(raw: str, text: str) -> tuple[int, int, int]:
+    """(palabras nuevas, palabras quitadas, palabras del original), sin contar tildes, mayúsculas ni puntuación.
+
+    Una palabra cambiada por otra parecida (una errata de transcripción) no cuenta como nueva ni como quitada.
+    """
+    a, b = _fold_words(raw), _fold_words(text)
+    added = removed = 0
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "delete":
+            removed += i2 - i1
+        elif tag == "insert":
+            added += j2 - j1
+        elif tag == "replace":
+            similar = sum(_similar(x, y) for x, y in zip(a[i1:i2], b[j1:j2]))
+            added += (j2 - j1) - similar
+            removed += (i2 - i1) - similar
+    return added, removed, len(a)
+
+
 def validate(
     raw: str,
     output: str,
     mode: str,
     max_distance: float = 0.2,
     max_length_change: float = 0.25,
+    max_removed: float = 0.35,
 ) -> GuardResult:
     """Devuelve la corrección limpia si es aceptable o el motivo del rechazo."""
     text = clean_output(output, raw)
@@ -106,6 +143,9 @@ def validate(
         if len(raw_lines) != len(out_lines):
             return GuardResult(False, text, f"Cambia el número de versos ({len(raw_lines)} → {len(out_lines)}).")
         text = "\n".join(line.strip() for line in out_lines)
+
+    if mode == "prosa":
+        return _validate_prose(raw, text, max_distance, max_length_change, max_removed)
 
     a = _normalize(raw.strip(), mode)
     b = _normalize(text, mode)
@@ -120,4 +160,20 @@ def validate(
     if distance > 6 and distance / longest > max_distance:
         return GuardResult(False, text, f"Cambia demasiado el texto ({distance / longest:.0%} de diferencia).")
 
+    return GuardResult(True, text)
+
+
+def _validate_prose(raw: str, text: str, max_new: float, max_growth: float, max_removed: float) -> GuardResult:
+    """En prosa el corrector puede quitar titubeos (repeticiones, autocorrecciones, muletillas), así que se mide
+    por separado lo que añade o cambia, con poco margen, y lo que quita, con más."""
+    added, removed, total = word_changes(raw, text)
+    total = max(total, 1)
+    # Unas pocas palabras siempre se permiten: en un texto corto ya son mucho porcentaje.
+    if added > 2 and added / total > max_new:
+        return GuardResult(False, text, f"Añade o cambia demasiadas palabras ({added} de {total}).")
+    if removed > 3 and removed / total > max_removed:
+        return GuardResult(False, text, f"Quita demasiado texto ({removed} de {total} palabras).")
+    growth = len(text) - len(raw.strip())
+    if growth > 8 and growth / max(len(raw.strip()), 1) > max_growth:
+        return GuardResult(False, text, f"La longitud crece un {growth / max(len(raw.strip()), 1):.0%}.")
     return GuardResult(True, text)

@@ -64,6 +64,7 @@ class Settings:
     context_paragraphs: int = 2
     guard_max_distance: float = 0.2
     guard_max_length_change: float = 0.25
+    guard_max_removed: float = 0.35  # en prosa: lo que puede quitar al limpiar titubeos
     glossary: list[str] = field(default_factory=list)
     highlight_changes: bool = True
 

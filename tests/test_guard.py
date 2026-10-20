@@ -60,6 +60,8 @@ def test_rewrite_is_rejected():
 def test_length_change_is_rejected():
     longer = GOOD + " Y entonces todo el pueblo se reunió para leerla en voz alta delante del alcalde."
     r = validate(RAW, longer, "prosa")
+    assert not r.ok and "Añade" in r.reason
+    r = validate("verde que te quiero", "verde que te quiero verde viento verdes ramas", "poesia")
     assert not r.ok and "longitud" in r.reason
 
 
@@ -77,9 +79,47 @@ def test_short_texts_have_absolute_margin():
 
 
 def test_thresholds_are_configurable():
-    out = "Nadie esperaba aquella carta que llegó ese día. El cartero la dejó en la puerta de la iglesia."
+    out = "Nadie aguardaba aquella misiva que llegó ese día. El cartero la dejó en la puerta de la iglesia."
     assert validate(RAW, out, "prosa", max_distance=0.3).ok
     assert not validate(RAW, out, "prosa", max_distance=0.05).ok
+    cleaned = "El tren salía a las nueve."
+    assert validate("el tren salía a las ocho no a las nueve", cleaned, "prosa", max_removed=0.5).ok
+    assert not validate("el tren salía a las ocho no a las nueve", cleaned, "prosa", max_removed=0.2).ok
+
+
+@pytest.mark.parametrize(
+    "raw, out",
+    [
+        (
+            "El tren salía a las ocho, no, a las nueve de la mañana y nadie nadie en la estación sabía, eh, "
+            "sabía adónde iba.",
+            "El tren salía a las nueve de la mañana y nadie en la estación sabía adónde iba.",
+        ),
+        (
+            "Mi abuela tenía una casa en el en el campo con un huerto, este, muy grande.",
+            "Mi abuela tenía una casa en el campo con un huerto muy grande.",
+        ),
+        (
+            "Los árboles verdes se asombra, se asomaban por doquier.",
+            "Los árboles verdes se asomaban por doquier.",
+        ),
+        (
+            "hacía fresco y los árboles comenzaban a adquirir un color verde todo se observaba limpio",
+            "Hacía fresco, y los árboles comenzaban a adquirir un color verde; todo se observaba limpio.",
+        ),
+    ],
+)
+def test_disfluency_cleanup_is_accepted(raw, out):
+    r = validate(raw, out, "prosa")
+    assert r.ok, r.reason
+
+
+def test_word_changes_ignores_transcription_typos():
+    from dictado.llm.guard import word_changes
+
+    assert word_changes("nadie esperava la carta", "Nadie esperaba la carta.") == (0, 0, 4)
+    assert word_changes("nadie nadie sabía", "Nadie sabía.") == (0, 1, 3)
+    assert word_changes("la carta", "la misiva") == (1, 1, 2)
 
 
 def test_poetry_line_count_must_match():

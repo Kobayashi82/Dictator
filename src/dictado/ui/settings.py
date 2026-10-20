@@ -283,6 +283,15 @@ class SettingsDialog(QDialog):
         self.max_length.setSingleStep(0.05)
         self.max_length.setValue(s.guard_max_length_change)
         form.addRow("Variación máxima de longitud:", self.max_length)
+        self.max_removed = QDoubleSpinBox()
+        self.max_removed.setRange(0.05, 1)
+        self.max_removed.setSingleStep(0.05)
+        self.max_removed.setValue(s.guard_max_removed)
+        self.max_removed.setToolTip(
+            "En prosa, parte del texto que el corrector puede quitar al limpiar repeticiones, "
+            "autocorrecciones y muletillas."
+        )
+        form.addRow("Texto máximo que puede quitar:", self.max_removed)
         outer.addWidget(common)
         outer.addStretch()
 
@@ -400,6 +409,7 @@ class SettingsDialog(QDialog):
             context_paragraphs=self.context.value(),
             guard_max_distance=round(self.max_distance.value(), 2),
             guard_max_length_change=round(self.max_length.value(), 2),
+            guard_max_removed=round(self.max_removed.value(), 2),
             glossary=glossary,
             managed_enabled=bool(self.source.currentData()),
             managed_device=self.llm_device.currentData(),
