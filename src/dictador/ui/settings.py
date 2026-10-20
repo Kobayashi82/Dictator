@@ -26,14 +26,16 @@ from PySide6.QtWidgets import (
 )
 
 from dictador.config import Settings, default_models_dir
+from dictador.i18n import LANGUAGE_LABELS, LANGUAGES, N_, language, tr
 from dictador.ui import style
 from dictador.ui.theme import THEME_LABELS, THEMES
 from dictador.ui.widgets import Badge, Combo, SegmentedControl, Switch
 
 FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 36)
-PARAGRAPH_PAUSES = [("1800", "Corta", "Unos 2 segundos de silencio"), ("2500", "Normal", "Unos 2,5 segundos"),
-                    ("4000", "Larga", "Unos 4 segundos")]
-PROMPT_MODES = [("prosa", "Modo Texto"), ("poesia", "Modo Poesía"), ("notas", "Modo Lista")]
+PARAGRAPH_PAUSES = [("1800", N_("Corta"), N_("Unos 2 segundos de silencio")),
+                    ("2500", N_("Normal"), N_("Unos 2,5 segundos")),
+                    ("4000", N_("Larga"), N_("Unos 4 segundos"))]
+PROMPT_MODES = [("prosa", N_("Modo Texto")), ("poesia", N_("Modo Poesía")), ("notas", N_("Modo Lista"))]
 
 
 _SAFE_KEYS = {Qt.Key.Key_Pause, Qt.Key.Key_ScrollLock, Qt.Key.Key_Insert}
@@ -42,18 +44,18 @@ _SAFE_KEYS = {Qt.Key.Key_Pause, Qt.Key.Key_ScrollLock, Qt.Key.Key_Insert}
 def key_problem(seq: QKeySequence, taken: dict[str, str]) -> str:
     """Por qué no vale esa tecla para hablar (vacío si vale)."""
     if seq.isEmpty():
-        return "No se ha elegido ninguna tecla."
+        return tr("No se ha elegido ninguna tecla.")
     combo = seq[0]
     key, mods = combo.key(), combo.keyboardModifiers()
     with_modifier = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
                                  | Qt.KeyboardModifier.MetaModifier))
     function_key = Qt.Key.Key_F1.value <= key.value <= Qt.Key.Key_F35.value
     if not (with_modifier or function_key or key in _SAFE_KEYS):
-        return ("Esa tecla escribe en el documento. Elija una tecla de función (F2…F12) "
-                "o una combinación con Ctrl o Alt.")
+        return tr("Esa tecla escribe en el documento. Elija una tecla de función (F2…F12) "
+                  "o una combinación con Ctrl o Alt.")
     used = taken.get(seq.toString(QKeySequence.SequenceFormat.PortableText))
     if used:
-        return f"Esa tecla ya sirve para «{used}». Elija otra."
+        return tr("Esa tecla ya sirve para «{action}». Elija otra.", action=used)
     return ""
 
 
@@ -133,7 +135,7 @@ class SettingsDialog(QDialog):
         """`taken`: atajos que ya usa el programa (texto → nombre), para no repetirlos en la tecla de hablar."""
         super().__init__(parent)
         self._taken = taken or {}
-        self.setWindowTitle("Ajustes")
+        self.setWindowTitle(tr("Ajustes"))
         self.resize(780, 820)
         self._original = settings
         self.fake_llm = fake_llm
@@ -143,7 +145,7 @@ class SettingsDialog(QDialog):
         self.body = QVBoxLayout(content)
         self.body.setContentsMargins(36, 28, 36, 20)
         self.body.setSpacing(18)
-        title = QLabel("Ajustes")
+        title = QLabel(tr("Ajustes"))
         title.setFont(style.display_font(24))
         self.body.addWidget(title)
 
@@ -159,9 +161,9 @@ class SettingsDialog(QDialog):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(content)
 
-        cancel = QPushButton("Cancelar")
+        cancel = QPushButton(tr("Cancelar"))
         cancel.clicked.connect(self.reject)
-        save = QPushButton("Guardar los cambios")
+        save = QPushButton(tr("Guardar los cambios"))
         save.setProperty("primary", True)
         save.setDefault(True)
         save.clicked.connect(self.accept)
@@ -223,19 +225,24 @@ class SettingsDialog(QDialog):
     # -- secciones ------------------------------------------------------------------------------------------------
 
     def _appearance(self, s: Settings) -> None:
-        card = self._card(style.ICON_THEME, "Aspecto")
-        self.theme = SegmentedControl([(k, THEME_LABELS[k], "") for k in THEMES])
+        card = self._card(style.ICON_THEME, tr("Aspecto"))
+        self.theme = SegmentedControl([(k, tr(THEME_LABELS[k]), "") for k in THEMES])
         self.theme.set_current(s.theme if s.theme in THEMES else "claro", animate=False)
-        self._option(card, "Colores", "Claro como el papel, u oscuro para descansar la vista.", self.theme)
+        self._option(card, tr("Colores"), tr("Claro como el papel, u oscuro para descansar la vista."), self.theme)
+        # Cada idioma con su propio nombre: quien no entiende el actual reconoce el suyo.
+        self.language = SegmentedControl([(k, LANGUAGE_LABELS[k], "") for k in LANGUAGES])
+        self.language.set_current(language(), animate=False)
+        self._option(card, "Idioma · Language",
+                     tr("Del programa y de lo que dicta. El programa se reinicia para cambiarlo."), self.language)
         self.font_size = _Stepper(s.font_size, FONT_SIZES)
-        self._option(card, "Tamaño de la letra", "También con los botones «Letra −» y «Letra +».", self.font_size)
+        self._option(card, tr("Tamaño de la letra"), tr("También con los botones «Letra −» y «Letra +»."), self.font_size)
         self.italic = Switch(s.document_italic)
-        self._option(card, "Texto en cursiva", "Como el que aparece mientras habla.", self.italic)
+        self._option(card, tr("Texto en cursiva"), tr("Como el que aparece mientras habla."), self.italic)
 
     def _dictation(self, s: Settings) -> None:
-        card = self._card(style.ICON_MIC, "Micrófono y dictado")
+        card = self._card(style.ICON_MIC, tr("Micrófono y dictado"))
         self.device = Combo()
-        self.device.addItem("El micrófono de siempre (predeterminado)", "")
+        self.device.addItem(tr("El micrófono de siempre (predeterminado)"), "")
         try:
             from dictador.audio.capture import list_input_devices
 
@@ -244,24 +251,24 @@ class SettingsDialog(QDialog):
         except Exception:  # noqa: BLE001
             pass
         self.device.setCurrentIndex(max(0, self.device.findData(s.input_device)))
-        self._option(card, "Micrófono", "", self.device, below=True)
+        self._option(card, tr("Micrófono"), "", self.device, below=True)
         self._dictate_key = s.dictate_key
         self.dictate_key = QKeySequenceEdit(QKeySequence(s.dictate_key))
         self.dictate_key.setMaximumSequenceLength(1)
         self.dictate_key.setFixedWidth(150)
         self.dictate_key.editingFinished.connect(self._key_chosen)
-        key_reset = QPushButton("Restaurar")
+        key_reset = QPushButton(tr("Restaurar"))
         key_reset.setProperty("small", True)
-        key_reset.setToolTip("Volver a F9")
+        key_reset.setToolTip(tr("Volver a F9"))
         key_reset.clicked.connect(lambda: (self.dictate_key.setKeySequence(QKeySequence("F9")), self._key_chosen()))
         key_row = QWidget()
         row = QHBoxLayout(key_row)
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.dictate_key)
         row.addWidget(key_reset)
-        self._option(card, "Tecla para hablar",
-                     "Pulse en la casilla y luego la tecla. Un toque empieza y otro para; si la mantiene pulsada, "
-                     "para al soltarla.", key_row)
+        self._option(card, tr("Tecla para hablar"),
+                     tr("Pulse en la casilla y luego la tecla. Un toque empieza y otro para; si la mantiene pulsada, "
+                        "para al soltarla."), key_row)
         self.key_problem = QLabel()
         self.key_problem.setFont(style.ui_font(11.5))
         self.key_problem.setProperty("warning", True)
@@ -269,41 +276,41 @@ class SettingsDialog(QDialog):
         self.key_problem.hide()
         card.addWidget(self.key_problem)
         self._pause_start = _closest(s.long_pause_ms, PARAGRAPH_PAUSES)
-        self.paragraph_pause = SegmentedControl(PARAGRAPH_PAUSES)
+        self.paragraph_pause = SegmentedControl([(k, tr(t), tr(h)) for k, t, h in PARAGRAPH_PAUSES])
         self.paragraph_pause.set_current(self._pause_start, animate=False)
-        self._option(card, "Silencio para empezar un párrafo",
-                     "Si a veces se le corta el párrafo mientras piensa, elija «Larga».", self.paragraph_pause)
+        self._option(card, tr("Silencio para empezar un párrafo"),
+                     tr("Si a veces se le corta el párrafo mientras piensa, elija «Larga»."), self.paragraph_pause)
         self.live_text = Switch(s.live_text)
-        self._option(card, "Ver lo que digo mientras hablo", "Aparece en gris y se completa al hacer una pausa.",
+        self._option(card, tr("Ver lo que digo mientras hablo"), tr("Aparece en gris y se completa al hacer una pausa."),
                      self.live_text)
         self.voice_commands = Switch(s.voice_commands)
-        self._option(card, "Entender órdenes de voz",
-                     "«punto y aparte», «borra la última frase», «título: …»", self.voice_commands)
+        self._option(card, tr("Entender órdenes de voz"),
+                     tr("«punto y aparte», «borra la última frase», «título: …»"), self.voice_commands)
 
     def _corrector(self, s: Settings) -> None:
         card = self._card(style.ICON_CHECK, "Corrector", "SUCCESS")
         self.builtin_status = QLabel()
         self.builtin_status.setFont(style.ui_font(13))
         self.builtin_status.setWordWrap(True)
-        self.download_llm = QPushButton("Descargar")
+        self.download_llm = QPushButton(tr("Descargar"))
         self.download_llm.setProperty("small", True)
         self.download_llm.clicked.connect(self._download_llm)
         row = QHBoxLayout()
         row.addWidget(self.builtin_status, 1)
         row.addWidget(self.download_llm)
         card.addLayout(row)
-        options = [("cpu", "Procesador", ""), ("gpu", "Tarjeta gráfica", "")]
+        options = [("cpu", tr("Procesador"), ""), ("gpu", tr("Tarjeta gráfica"), "")]
         self._external = bool(s.llm_model) and not s.managed_enabled
         if self._external:
-            options.append(("externo", "Servidor externo", "El que está configurado en config.json"))
+            options.append(("externo", tr("Servidor externo"), tr("El que está configurado en config.json")))
         self.where = SegmentedControl(options)
         self._where_start = "externo" if self._external else s.managed_device
         self.where.set_current(self._where_start, animate=False)
-        self._option(card, "Dónde trabaja",
-                     "La tarjeta gráfica es más rápida, pero no funciona bien en todos los equipos.", self.where)
+        self._option(card, tr("Dónde trabaja"),
+                     tr("La tarjeta gráfica es más rápida, pero no funciona bien en todos los equipos."), self.where)
 
     def _advanced(self, s: Settings) -> None:
-        self.more = QPushButton("Mostrar las opciones avanzadas")
+        self.more = QPushButton(tr("Mostrar las opciones avanzadas"))
         self.more.setProperty("link", True)
         self.more.setCursor(Qt.CursorShape.PointingHandCursor)
         self.more.clicked.connect(self._toggle_advanced)
@@ -332,54 +339,56 @@ class SettingsDialog(QDialog):
             return box
 
         self.autosave = spin(10, 3600, 10, s.autosave_s, " s")
-        form.addRow(label("Copia de seguridad cada"), self.autosave)
+        form.addRow(label(tr("Copia de seguridad cada")), self.autosave)
         self.vad_threshold = spin(0.1, 0.95, 0.05, s.vad_threshold, double=True)
-        self.vad_threshold.setToolTip("Más alto: hace falta una voz más clara para empezar a escribir (menos ruido).")
-        form.addRow(label("Exigencia del micrófono (0,1–0,95)"), self.vad_threshold)
+        self.vad_threshold.setToolTip(tr("Más alto: hace falta una voz más clara para empezar a escribir (menos ruido)."))
+        form.addRow(label(tr("Exigencia del micrófono (0,1–0,95)")), self.vad_threshold)
         self.short_pause = spin(300, 3000, 100, s.short_pause_ms, " ms")
-        form.addRow(label("Pausa que cierra la frase"), self.short_pause)
+        form.addRow(label(tr("Pausa que cierra la frase")), self.short_pause)
         self.verse_pause = spin(150, 2000, 50, s.poetry_verse_pause_ms, " ms")
-        form.addRow(label("Poesía: pausa que cierra el verso"), self.verse_pause)
+        form.addRow(label(tr("Poesía: pausa que cierra el verso")), self.verse_pause)
         self.stanza_pause = spin(500, 10000, 100, s.poetry_stanza_pause_ms, " ms")
-        form.addRow(label("Poesía: pausa que cierra la estrofa"), self.stanza_pause)
+        form.addRow(label(tr("Poesía: pausa que cierra la estrofa")), self.stanza_pause)
         self.gpu_layers = spin(1, 999, 1, max(1, s.managed_gpu_layers))
-        self.gpu_layers.setToolTip("Capas del modelo en la tarjeta gráfica (-ngl). 99 = todas.")
-        form.addRow(label("Capas en la tarjeta gráfica"), self.gpu_layers)
+        self.gpu_layers.setToolTip(tr("Capas del modelo en la tarjeta gráfica (-ngl). 99 = todas."))
+        form.addRow(label(tr("Capas en la tarjeta gráfica")), self.gpu_layers)
         self.models_dir = QLineEdit(s.models_dir)
         self.models_dir.setPlaceholderText(str(default_models_dir()))
         self.models_dir.editingFinished.connect(self._update_builtin_status)
-        browse = QPushButton("Examinar…")
+        browse = QPushButton(tr("Examinar…"))
         browse.setProperty("small", True)
         browse.clicked.connect(self._browse_models)
         folder = QHBoxLayout()
         folder.addWidget(self.models_dir, 1)
         folder.addWidget(browse)
-        form.addRow(label("Carpeta de los modelos"), folder)
+        form.addRow(label(tr("Carpeta de los modelos")), folder)
         self.save_audio = Switch(s.save_session_audio)
-        self.save_audio.setToolTip("En %LOCALAPPDATA%\\Dictador\\diagnostico")
-        form.addRow(label("Guardar el audio para diagnóstico"), self.save_audio)
+        self.save_audio.setToolTip(tr("En {folder}", folder="%LOCALAPPDATA%\\Dictador\\diagnostico"))
+        form.addRow(label(tr("Guardar el audio para diagnóstico")), self.save_audio)
         self.glossary = QPlainTextEdit("\n".join(s.glossary))
-        self.glossary.setPlaceholderText("Un nombre por línea")
+        self.glossary.setPlaceholderText(tr("Un nombre por línea"))
         self.glossary.setFixedHeight(120)
-        form.addRow(label("Nombres para todos\nlos documentos"), self.glossary)
+        form.addRow(label(tr("Nombres para todos\nlos documentos")), self.glossary)
 
         # Instrucciones del corrector (system prompt), una por modo.
-        from dictador.llm.prompts import PRESETS
+        from dictador.llm.prompts import presets
 
-        self._presets = PRESETS
-        self._prompts = {m: s.custom_prompts.get(m, "").strip() or PRESETS[m] for m in PRESETS}
+        self._lang = language()
+        self._presets = presets(self._lang)
+        self._prompts = {m: s.custom_prompts.get(f"{self._lang}/{m}", "").strip() or self._presets[m]
+                         for m in self._presets}
         self.prompt_mode = Combo()
         for key, text in PROMPT_MODES:
-            self.prompt_mode.addItem(text, key)
+            self.prompt_mode.addItem(tr(text), key)
         self._prompt_shown = self.prompt_mode.currentData()
         self.prompt_mode.currentIndexChanged.connect(self._show_prompt)
-        self.prompt_reset = QPushButton("Restaurar el original")
+        self.prompt_reset = QPushButton(tr("Restaurar el original"))
         self.prompt_reset.setProperty("small", True)
         self.prompt_reset.clicked.connect(self._reset_prompt)
         head = QHBoxLayout()
         head.addWidget(self.prompt_mode, 1)
         head.addWidget(self.prompt_reset)
-        form.addRow(label("Instrucciones del\ncorrector"), head)
+        form.addRow(label(tr("Instrucciones del\ncorrector")), head)
         self.prompt = QPlainTextEdit(self._prompts[self._prompt_shown])
         self.prompt.setFont(style.ui_font(11.5))
         self.prompt.setFixedHeight(260)
@@ -399,7 +408,7 @@ class SettingsDialog(QDialog):
     def _toggle_advanced(self) -> None:
         show = self.advanced.isHidden()
         self.advanced.setVisible(show)
-        self.more.setText("Ocultar las opciones avanzadas" if show else "Mostrar las opciones avanzadas")
+        self.more.setText(tr("Ocultar las opciones avanzadas") if show else tr("Mostrar las opciones avanzadas"))
 
     def _key_chosen(self) -> None:
         seq = self.dictate_key.keySequence()
@@ -423,13 +432,17 @@ class SettingsDialog(QDialog):
         changed = self.prompt.toPlainText().strip() != self._presets[self._prompt_shown].strip()
         self.prompt_reset.setEnabled(changed)
         self.prompt_note.setText(
-            ("Modificadas por usted. " if changed else "Son las de serie. ")
-            + "El glosario y los párrafos anteriores se añaden solos. Afecta a lo que se corrija a partir de ahora."
+            (tr("Modificadas por usted.") if changed else tr("Son las de serie.")) + " "
+            + tr("El glosario y los párrafos anteriores se añaden solos. Afecta a lo que se corrija a partir de ahora.")
         )
 
     def _custom_prompts(self) -> dict[str, str]:
         self._prompts[self._prompt_shown] = self.prompt.toPlainText()
-        return {m: t.strip() for m, t in self._prompts.items() if t.strip() and t.strip() != self._presets[m].strip()}
+        # Las del otro idioma se conservan tal cual; las de este, solo si difieren de las de serie.
+        out = {k: v for k, v in self._original.custom_prompts.items() if not k.startswith(f"{self._lang}/")}
+        out.update({f"{self._lang}/{m}": t.strip() for m, t in self._prompts.items()
+                    if t.strip() and t.strip() != self._presets[m].strip()})
+        return out
 
     def _models_dir(self) -> Path:
         text = self.models_dir.text().strip()
@@ -441,9 +454,9 @@ class SettingsDialog(QDialog):
         missing = [p for p in LLM_PACKS if not pack_present(self._models_dir(), p)]
         if missing:
             size = f"{sum(p.size for p in missing) / 1_000_000:,.0f}".replace(",", ".")
-            self.builtin_status.setText(f"Corrige las faltas y la puntuación. Falta descargarlo ({size} MB).")
+            self.builtin_status.setText(tr("Corrige las faltas y la puntuación. Falta descargarlo ({size} MB).", size=size))
         else:
-            self.builtin_status.setText("✓  Instalado. Corrige las faltas y la puntuación en este equipo.")
+            self.builtin_status.setText(tr("✓  Instalado. Corrige las faltas y la puntuación en este equipo."))
         self.builtin_status.setProperty("ok", not missing)
         self.builtin_status.style().unpolish(self.builtin_status)
         self.builtin_status.style().polish(self.builtin_status)
@@ -456,7 +469,7 @@ class SettingsDialog(QDialog):
         self._update_builtin_status()
 
     def _browse_models(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Carpeta de los modelos", str(self._models_dir()))
+        d = QFileDialog.getExistingDirectory(self, tr("Carpeta de los modelos"), str(self._models_dir()))
         if d:
             self.models_dir.setText(d)
             self._update_builtin_status()
@@ -470,6 +483,8 @@ class SettingsDialog(QDialog):
         return replace(
             s,
             theme=self.theme.current(),
+            # Sin tocar, se queda como estaba (vacío = el de Windows).
+            language=s.language if self.language.current() == language() else self.language.current(),
             font_size=self.font_size.value(),
             document_italic=self.italic.isChecked(),
             input_device=self.device.currentData() or "",

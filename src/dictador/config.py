@@ -42,7 +42,6 @@ def migrate_old_folders() -> None:
 
 
 MODES = ("prosa", "poesia", "notas", "ninguno")
-MODE_LABELS = {"prosa": "Prosa", "poesia": "Poesía", "notas": "Notas/Lista", "ninguno": "Sin corrección"}
 
 
 @dataclass
@@ -54,6 +53,7 @@ class Settings:
     autosave_s: int = 60
     font_size: int = 18
     theme: str = "claro"  # claro | oscuro | sistema
+    language: str = ""  # es | en: interfaz y dictado; vacío = el de Windows
     document_italic: bool = True  # el texto en cursiva, como lo que aparece mientras se habla
     onboarding_done: bool = False  # el asistente de la primera vez ya se completó
     voice_commands: bool = True
@@ -82,7 +82,8 @@ class Settings:
     guard_max_length_change: float = 0.25
     guard_max_removed: float = 0.35  # en prosa: lo que puede quitar al limpiar titubeos
     glossary: list[str] = field(default_factory=list)
-    custom_prompts: dict[str, str] = field(default_factory=dict)  # modo → instrucciones propias (si no, las de serie)
+    # «idioma/modo» («es/prosa», «en/poesia») → instrucciones propias del corrector (si no, las de serie)
+    custom_prompts: dict[str, str] = field(default_factory=dict)
     highlight_changes: bool = False  # mostrar marcas y cambios del corrector (vista avanzada)
 
     # Corrector integrado (llama-server propio; rutas vacías = lo descargado en la carpeta de modelos)
@@ -117,6 +118,8 @@ class Settings:
             settings.mode = "prosa"
         if not isinstance(settings.custom_prompts, dict):
             settings.custom_prompts = {}
+        # Las primeras versiones guardaban solo el modo: eran instrucciones en español.
+        settings.custom_prompts = {(k if "/" in k else f"es/{k}"): v for k, v in settings.custom_prompts.items()}
         return settings
 
     def save(self, path: Path | None = None) -> None:

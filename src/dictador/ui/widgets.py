@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dictador.i18n import tr
 from dictador.ui import style
 
 
@@ -80,7 +81,7 @@ class MicButton(QAbstractButton):
         self._hover_anim.valueChanged.connect(self._set_hover)
         self._ticker = QTimer(self, interval=16)
         self._ticker.timeout.connect(self.update)
-        self.setAccessibleName("Empezar a hablar")
+        self.setAccessibleName(tr("Empezar a hablar"))
 
     def sizeHint(self) -> QSize:
         return QSize(300, 76) if self._compact else QSize(340, 84)
@@ -106,7 +107,7 @@ class MicButton(QAbstractButton):
             self._level = 0.0
         else:
             self._ticker.start()
-        self.setAccessibleName({"idle": "Empezar a hablar", "listening": "Parar", "loading": "Preparando"}[state])
+        self.setAccessibleName(tr({"idle": "Empezar a hablar", "listening": "Parar", "loading": "Preparando…"}[state]))
         self.update()
 
     def set_level(self, level: float) -> None:
@@ -173,11 +174,11 @@ class MicButton(QAbstractButton):
 
         # Icono (o arco girando) y texto.
         if self._state == "loading":
-            label, icon = "Preparando…", None
+            label, icon = tr("Preparando…"), None
         elif self._state == "listening":
-            label, icon = "Parar", style.ICON_STOP
+            label, icon = tr("Parar"), style.ICON_STOP
         else:
-            label, icon = "Empezar a hablar", style.ICON_MIC
+            label, icon = tr("Empezar a hablar"), style.ICON_MIC
         text_font = style.ui_font(16 if self._compact else 18, QFont.Weight.DemiBold)
         icon_size = 20 if self._compact else 22
         p.setFont(text_font)
@@ -815,4 +816,4 @@ def ask(parent, title: str, text: str, buttons: list[str], primary: int = 0, **k
 
 def tell(parent, title: str, text: str, warning: bool = False) -> None:
     kw = {"icon": style.ICON_WARNING, "icon_color": "WARNING"} if warning else {"icon": style.ICON_IDEA}
-    FriendlyDialog(parent, title, text, ["Entendido"], **kw).exec()
+    FriendlyDialog(parent, title, text, [tr("Entendido")], **kw).exec()

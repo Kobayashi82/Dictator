@@ -14,6 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from dictador.i18n import tr
+
 HF = "https://huggingface.co"
 
 
@@ -213,7 +215,7 @@ def download_packs(
                 raise
             if got != f.size or h.hexdigest() != _expected(f):
                 part.unlink(missing_ok=True)
-                raise IntegrityError(f"{f.name} no ha pasado la verificación de integridad (descarga corrupta).")
+                raise IntegrityError(tr("{name} no ha pasado la verificación de integridad (descarga corrupta).", name=f.name))
             os.replace(part, target)
             if f.extract:
                 report(f"Descomprimiendo {f.name}…")

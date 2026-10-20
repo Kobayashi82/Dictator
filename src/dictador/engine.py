@@ -13,8 +13,9 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from dictador.audio.vad import FRAME_MS, SAMPLE_RATE, ParagraphBreak, Segmenter, Sentence
+from dictador.audio.vad import FRAME_MS, SAMPLE_RATE, Segmenter, Sentence
 from dictador.config import Settings, localdata_dir
+from dictador.i18n import tr
 
 _BREAK = object()  # marcador de párrafo en la cola del ASR
 _STOP = object()
@@ -209,7 +210,7 @@ class DictationEngine(QObject):
             self._running.clear()
             if capture is not None:
                 capture.stop()
-            self.error.emit(f"No se puede empezar a dictar: {e}")
+            self.error.emit(tr("No se puede empezar a dictar: {error}", error=e))
             self.state.emit("parado")
             return
 
@@ -310,7 +311,7 @@ class DictationEngine(QObject):
             try:
                 text = self._ensure_asr().transcribe(item)
             except Exception as e:  # noqa: BLE001
-                self.error.emit(f"Error al transcribir: {e}")
+                self.error.emit(tr("Error al transcribir: {error}", error=e))
                 text = ""
             finally:
                 self._count_pending(-1)

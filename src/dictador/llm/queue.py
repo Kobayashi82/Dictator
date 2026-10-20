@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, Signal
 from dictador.llm import guard
 from dictador.llm.client import LLMError
 from dictador.llm.prompts import build_messages, max_tokens_for
+from dictador.i18n import tr
 
 
 @dataclass
@@ -24,6 +25,7 @@ class CorrectionJob:
     max_length_change: float = 0.25
     max_removed: float = 0.35
     prompt: str = ""  # instrucciones propias (vacío: las de serie)
+    lang: str = "es"  # idioma del dictado
 
 
 class CorrectionQueue(QObject):
@@ -66,7 +68,7 @@ class CorrectionQueue(QObject):
                 self.status.emit("error", str(e))
                 return
             if client.model not in models and models:
-                self.status.emit("error", f"El servidor no tiene el modelo «{client.model}».")
+                self.status.emit("error", tr("El servidor no tiene el modelo «{model}».", model=client.model))
             else:
                 self.status.emit("ok", client.model)
 
@@ -109,18 +111,18 @@ class CorrectionQueue(QObject):
             if client is None:
                 with self._lock:
                     self._queued.discard(job.pid)
-                self.finished.emit(job.pid, job.raw, None, "El corrector no está configurado.")
+                self.finished.emit(job.pid, job.raw, None, tr("El corrector no está configurado."))
                 continue
             if not self._wait_ready(client):
                 with self._lock:
                     self._queued.discard(job.pid)
-                self.finished.emit(job.pid, job.raw, None, "El servidor del corrector no arrancó.")
+                self.finished.emit(job.pid, job.raw, None, tr("El servidor del corrector no arrancó."))
                 continue
             self.started.emit(job.pid)
             self.status.emit("corrigiendo", str(self.pending()))
             corrected, reason = None, ""
             try:
-                messages = build_messages(job.mode, job.raw, job.context, job.glossary, job.prompt)
+                messages = build_messages(job.mode, job.raw, job.context, job.glossary, job.prompt, job.lang)
                 output = client.complete(messages, max_tokens_for(job.raw, job.mode))
                 result = guard.validate(
                     job.raw, output, job.mode, job.max_distance, job.max_length_change, job.max_removed
@@ -131,10 +133,10 @@ class CorrectionQueue(QObject):
                     reason = result.reason
                 ok = True
             except LLMError as e:
-                reason = f"Error del corrector: {e}"
+                reason = tr("Error del corrector: {error}", error=e)
                 ok = False
             except Exception as e:  # noqa: BLE001
-                reason = f"Error inesperado: {e}"
+                reason = tr("Error inesperado: {error}", error=e)
                 ok = False
             with self._lock:
                 self._queued.discard(job.pid)

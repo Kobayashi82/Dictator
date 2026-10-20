@@ -79,21 +79,28 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication
 
     from dictador.config import APP_NAME, Settings
-    from dictador.ui import style
-    from dictador.ui.main_window import MainWindow
-    from dictador.ui.theme import apply_theme
+    from dictador.i18n import language, set_language
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_NAME)
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "ui" / "assets" / "dictador.png")))
-    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
-
-    translator = QTranslator(app)  # textos de Qt (botones estándar, atajos) en español
-    if translator.load(QLocale("es_ES"), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
-        app.installTranslator(translator)
-    app.setFont(style.ui_font(12))
     settings = Settings.load()
+    # El idioma, antes de importar la interfaz: algunos textos se leen al importar.
+    set_language(settings.language)
+    if language() == "es":
+        from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+
+        translator = QTranslator(app)  # textos de Qt (botones estándar, atajos) en español
+        path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+        if translator.load(QLocale("es_ES"), "qtbase", "_", path):
+            app.installTranslator(translator)
+
+    from dictador.ui import style
+    from dictador.ui.main_window import MainWindow
+    from dictador.ui.theme import apply_theme
+
+    app.setFont(style.ui_font(12))
     # Por defecto, claro como una hoja de Word, sea cual sea el tema de Windows (se cambia en Ajustes).
     apply_theme(settings.theme)
 

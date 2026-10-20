@@ -13,8 +13,17 @@ import unicodedata
 from dataclasses import dataclass
 
 _WORD = re.compile(r"\w+")
-_FILLERS = {"eh", "em", "emm", "mmm", "este"}
-_MARKERS = {"no", "digo", "perdon", "mejor", "bueno", "eh", "em", "emm", "mmm", "o", "sea"}
+# Por idioma: muletillas que se quitan, palabras que marcan una autocorrección («a las ocho, no, a las nueve») y
+# muletillas que también son palabras normales, que solo se quitan sueltas entre comas («este», «like»).
+_FILLERS = {
+    "es": {"eh", "em", "emm", "mmm", "este"},
+    "en": {"uh", "um", "umm", "uhm", "er", "erm", "hmm", "mmm", "like"},
+}
+_MARKERS = {
+    "es": {"no", "digo", "perdon", "mejor", "bueno", "eh", "em", "emm", "mmm", "o", "sea"},
+    "en": {"no", "sorry", "i", "mean", "rather", "well", "uh", "um", "umm", "er", "or", "actually"},
+}
+_COMMA_FILLERS = {"es": {"este"}, "en": {"like"}}
 
 
 def _fold(word: str) -> str:
@@ -41,7 +50,7 @@ class Hesitation:
     sure: bool  # claramente involuntario: se arregla sin preguntar al corrector
 
 
-def find_hesitations(text: str, max_n: int = 4) -> list[Hesitation]:
+def find_hesitations(text: str, max_n: int = 4, lang: str = "es") -> list[Hesitation]:
     """Trozos que parecen una repetición, una autocorrección o una muletilla, con la versión que quedaría."""
     words = list(_WORD.finditer(text))
     folded = [_fold(w.group(0)) for w in words]
@@ -56,7 +65,7 @@ def find_hesitations(text: str, max_n: int = 4) -> list[Hesitation]:
                 if j + n > len(words):
                     continue
                 between = folded[i + n : j]
-                marked = any(w in _MARKERS for w in between)
+                marked = any(w in _MARKERS[lang] for w in between)
                 # Hueco de una palabra solo en frases de 2+ palabras; más hueco solo si hay una marca de
                 # corrección en medio («a las ocho, no, a las nueve», «sabía, eh, sabía»).
                 if gap and not (gap == 1 and n >= 2) and not marked:
@@ -88,7 +97,7 @@ def find_hesitations(text: str, max_n: int = 4) -> list[Hesitation]:
             i += 1
     for w, f in zip(words, folded):
         inside = any(h.start <= w.start() < h.end for h in found_all)
-        if not inside and f in _FILLERS and (f != "este" or _between_commas(text, w)):
+        if not inside and f in _FILLERS[lang] and (f not in _COMMA_FILLERS[lang] or _between_commas(text, w)):
             found_all.append(Hesitation(w.start(), w.end(), w.group(0), "", sure=True))
     return sorted(found_all, key=lambda h: h.start)
 
@@ -100,9 +109,9 @@ def _between_commas(text: str, word: re.Match) -> bool:
     return (not before or before.endswith(",")) and (not after or after[0] in ",.")
 
 
-def repair(text: str) -> tuple[str, list[Hesitation]]:
+def repair(text: str, lang: str = "es") -> tuple[str, list[Hesitation]]:
     """Arregla los titubeos claros. Devuelve el texto arreglado y los dudosos, para señalárselos al corrector."""
-    hesitations = find_hesitations(text)
+    hesitations = find_hesitations(text, lang=lang)
     doubtful = [h for h in hesitations if not h.sure]
     out = text
     for h in sorted((h for h in hesitations if h.sure), key=lambda h: h.start, reverse=True):

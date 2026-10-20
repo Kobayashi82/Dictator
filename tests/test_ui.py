@@ -143,7 +143,7 @@ def test_segmented_and_dialog_widgets(app):
 def test_custom_prompt_reaches_the_corrector(window):
     jobs = []
     window.corrector.enqueue = jobs.append
-    window.settings.custom_prompts = {"prosa": "Instrucciones propias."}
+    window.settings.custom_prompts = {"es/prosa": "Instrucciones propias."}
     p = window.model.append_sentence("hola", "prosa")
     window.model.close_paragraph(correct=True)
     assert jobs and jobs[0].pid == p.id and jobs[0].prompt == "Instrucciones propias."

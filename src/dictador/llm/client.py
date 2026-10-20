@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import time
 
+from dictador.i18n import tr
+
 # Desactivar el razonamiento: Ollama entiende `reasoning_effort`, llama-server la plantilla de chat.
 _NO_THINK = {"reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
 
@@ -54,10 +56,10 @@ class LLMClient:
         except Exception as e:  # noqa: BLE001
             raise LLMError(_describe(e)) from e
         if not response.choices:
-            raise LLMError("Respuesta vacía del servidor.")
+            raise LLMError(tr("Respuesta vacía del servidor."))
         content = response.choices[0].message.content or ""
         if not content.strip() and response.choices[0].finish_reason == "length":
-            raise LLMError("El modelo agotó los tokens razonando: desactiva el razonamiento o usa otro modelo.")
+            raise LLMError(tr("El modelo agotó los tokens razonando: desactiva el razonamiento o usa otro modelo."))
         return content
 
     def _create(self, messages, max_tokens, extra):
@@ -78,15 +80,15 @@ def _describe(e: Exception) -> str:
     import openai
 
     if isinstance(e, openai.APITimeoutError):
-        return "Tiempo de espera agotado."
+        return tr("Tiempo de espera agotado.")
     if isinstance(e, openai.APIConnectionError):
-        return "No se puede conectar con el servidor."
+        return tr("No se puede conectar con el servidor.")
     if isinstance(e, openai.AuthenticationError):
-        return "Clave API no válida."
+        return tr("Clave API no válida.")
     if isinstance(e, openai.NotFoundError):
-        return "El servidor no encuentra ese modelo o esa ruta (¿falta /v1 en la URL?)."
+        return tr("El servidor no encuentra ese modelo o esa ruta (¿falta /v1 en la URL?).")
     if isinstance(e, openai.APIStatusError):
-        return f"Error del servidor ({e.status_code}): {e.message}"
+        return tr("Error del servidor ({code}): {message}", code=e.status_code, message=e.message)
     return str(e) or e.__class__.__name__
 
 
@@ -114,7 +116,7 @@ class FakeLLMClient:
 
     def complete(self, messages: list[dict], max_tokens: int) -> str:
         time.sleep(self.delay)
-        text = messages[-1]["content"].split("Texto a corregir:\n", 1)[-1]
+        text = re.split(r"(?:Texto a corregir|Text to correct):\n", messages[-1]["content"], maxsplit=1)[-1]
         lines = []
         for line in text.split("\n"):
             line = re.sub(r"\w+", lambda m: _FAKE_FIXES.get(m.group(0), m.group(0)), line).strip()

@@ -8,6 +8,7 @@ import re
 
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QTextBrowser, QVBoxLayout
 
+from dictador.i18n import tr
 from dictador.ui import style
 
 _TOKENS = re.compile(r"\s+|[^\s]+")
@@ -38,12 +39,12 @@ def diff_html(old: str, new: str, dark: bool = False) -> str:
 class DiffDialog(QDialog):
     def __init__(self, raw: str, corrected: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Cambios del corrector")
+        self.setWindowTitle(tr("Cambios del corrector"))
         self.resize(640, 380)
         view = QTextBrowser(self)
         view.setHtml(
             '<p style="font-size:13pt;line-height:140%">' + diff_html(raw, corrected, style.DARK) + "</p>"
-            "<hr><p><b>Original (Parakeet):</b><br>" + html.escape(raw).replace("\n", "<br>") + "</p>"
+            "<hr><p><b>" + html.escape(tr("Lo que se oyó al dictar:")) + "</b><br>" + html.escape(raw).replace("\n", "<br>") + "</p>"
         )
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
@@ -55,13 +56,13 @@ class DiffDialog(QDialog):
 class GlossaryDialog(QDialog):
     def __init__(self, terms: list[str], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Glosario del documento")
+        self.setWindowTitle(tr("Glosario del documento"))
         self.resize(420, 360)
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Nombres de personajes, lugares y vocabulario raro de este documento, uno por línea.\n"
-                "Se guardan con el proyecto y se suman al glosario general."
+                tr("Nombres de personajes, lugares y vocabulario raro de este documento, uno por línea.\n"
+                   "Se guardan con el proyecto y se suman al glosario general.")
             )
         )
         self.edit = QPlainTextEdit("\n".join(terms))

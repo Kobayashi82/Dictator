@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import html
 import json
+import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPropertyAnimation, QRect, QSize, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QProcess, QPropertyAnimation, QRect, QSize, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QKeySequence, QLinearGradient, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from dictador import commands
+from dictador.i18n import N_, language, system_language, tr
 from dictador.config import Settings, localdata_dir, recovery_dir
 from dictador.doc import storage
 from dictador.doc.model import DocumentModel
@@ -32,13 +34,13 @@ from dictador.ui.editor import DictationEditor
 from dictador.ui.theme import apply_theme
 from dictador.ui.widgets import IconButton, MenuPanel, MicButton, PillButton, SegmentedControl, Toast, ask, tell
 
-FILE_FILTER = "Documento de Dictador (*.dictador *.dictado)"
+FILE_FILTER = N_("Documento de Dictador (*.dictador *.dictado)")
 FONT_SIZES = (14, 16, 18, 20, 22, 24, 28, 32)
 MODE_OPTIONS = [
-    ("prosa", "Texto", "Texto normal: se corrigen solas las faltas y la puntuación."),
-    ("poesia", "Poesía", "Cada pausa corta es un verso y cada pausa larga, una estrofa."),
-    ("notas", "Lista", "Las enumeraciones («primero…, segundo…») se convierten en una lista."),
-    ("ninguno", "Sin corregir", "Escribe exactamente lo que dice, sin corregir nada."),
+    ("prosa", N_("Texto"), N_("Texto normal: se corrigen solas las faltas y la puntuación.")),
+    ("poesia", N_("Poesía"), N_("Cada pausa corta es un verso y cada pausa larga, una estrofa.")),
+    ("notas", N_("Lista"), N_("Las enumeraciones («primero…, segundo…») se convierten en una lista.")),
+    ("ninguno", N_("Sin corregir"), N_("Escribe exactamente lo que dice, sin corregir nada.")),
 ]
 PAGE_WIDTH = 900
 # Mantener pulsado más que esto para que pare al soltar (más en el botón: un clic lento no es «mantener»).
@@ -94,8 +96,8 @@ class _Canvas(QWidget):
         self._status_anim.finished.connect(self._status_swap)
 
         self.mic = MicButton(self)
-        self.paragraph = PillButton(style.ICON_ENTER, "Nuevo párrafo", self)
-        self.paragraph.setToolTip("Termina el párrafo y empieza otro (también puede decir «punto y aparte»)  (Ctrl+Intro)")
+        self.paragraph = PillButton(style.ICON_ENTER, tr("Nuevo párrafo"), self)
+        self.paragraph.setToolTip(tr("Termina el párrafo y empieza otro (también puede decir «punto y aparte»)  (Ctrl+Intro)"))
         self.toast = Toast(self)
 
     def page_rect(self) -> QRect:
@@ -188,7 +190,8 @@ class MainWindow(QMainWindow):
         self.engine.error.connect(self._on_engine_error)
         self.engine.partial.connect(self._on_partial)
         self.engine.speaking.connect(self._on_speaking)
-        self.engine.recording_saved.connect(lambda path: self.notify(f"Audio de diagnóstico guardado en {path}"))
+        self.engine.recording_saved.connect(
+            lambda path: self.notify(tr("Audio de diagnóstico guardado en {path}", path=path)))
 
         self.corrector = CorrectionQueue(self)
         self.corrector.started.connect(self._on_correction_started)
@@ -242,25 +245,25 @@ class MainWindow(QMainWindow):
         return act
 
     def _build_actions(self) -> None:
-        self.act_dictate = self._action("Empezar o parar de hablar", lambda: self._press("key"))
+        self.act_dictate = self._action(tr("Empezar o parar de hablar"), lambda: self._press("key"))
         self.act_dictate.setAutoRepeat(False)  # mantener la tecla no debe arrancar y parar sin fin
-        self.act_paragraph = self._action("Nuevo párrafo", self.new_paragraph, "Ctrl+Return")
-        self.act_new = self._action("Documento nuevo", self.file_new, QKeySequence.StandardKey.New)
-        self.act_open = self._action("Abrir…", self.file_open, QKeySequence.StandardKey.Open)
-        self.act_save = self._action("Guardar", self.file_save, QKeySequence.StandardKey.Save)
-        self.act_save_as = self._action("Guardar con otro nombre…", self.file_save_as, "Ctrl+Shift+S")
-        self.act_word = self._action("Guardar como documento de Word…", self.file_export_word, "Ctrl+E")
-        self.act_print = self._action("Imprimir…", self.file_print, QKeySequence.StandardKey.Print)
-        self.act_export = self._action("Exportar como texto o Markdown…", self.file_export)
-        self.act_import = self._action("Importar un texto…", self.file_import)
-        self.act_bigger = self._action("Letra más grande", lambda: self.change_font(+1), "Ctrl++")
-        self.act_smaller = self._action("Letra más pequeña", lambda: self.change_font(-1), "Ctrl+-")
-        self.act_settings = self._action("Ajustes…", self.open_settings, "Ctrl+,")
-        self.act_glossary = self._action("Nombres y palabras especiales…", self.edit_glossary)
-        self.act_correct_all = self._action("Volver a corregir todo el documento", self.recorrect_all)
-        self.act_retry = self._action("Reintentar los párrafos sin corregir", self.retry_failed)
-        self.act_help = self._action("Ver la explicación otra vez", lambda: self.run_onboarding(intro_only=True), "F1")
-        self.act_quit = self._action("Salir", self.close, "Ctrl+Q")
+        self.act_paragraph = self._action(tr("Nuevo párrafo"), self.new_paragraph, "Ctrl+Return")
+        self.act_new = self._action(tr("Documento nuevo"), self.file_new, QKeySequence.StandardKey.New)
+        self.act_open = self._action(tr("Abrir…"), self.file_open, QKeySequence.StandardKey.Open)
+        self.act_save = self._action(tr("Guardar"), self.file_save, QKeySequence.StandardKey.Save)
+        self.act_save_as = self._action(tr("Guardar con otro nombre…"), self.file_save_as, "Ctrl+Shift+S")
+        self.act_word = self._action(tr("Guardar como documento de Word…"), self.file_export_word, "Ctrl+E")
+        self.act_print = self._action(tr("Imprimir…"), self.file_print, QKeySequence.StandardKey.Print)
+        self.act_export = self._action(tr("Exportar como texto o Markdown…"), self.file_export)
+        self.act_import = self._action(tr("Importar un texto…"), self.file_import)
+        self.act_bigger = self._action(tr("Letra más grande"), lambda: self.change_font(+1), "Ctrl++")
+        self.act_smaller = self._action(tr("Letra más pequeña"), lambda: self.change_font(-1), "Ctrl+-")
+        self.act_settings = self._action(tr("Ajustes…"), self.open_settings, "Ctrl+,")
+        self.act_glossary = self._action(tr("Nombres y palabras especiales…"), self.edit_glossary)
+        self.act_correct_all = self._action(tr("Volver a corregir todo el documento"), self.recorrect_all)
+        self.act_retry = self._action(tr("Reintentar los párrafos sin corregir"), self.retry_failed)
+        self.act_help = self._action(tr("Ver la explicación otra vez"), lambda: self.run_onboarding(intro_only=True), "F1")
+        self.act_quit = self._action(tr("Salir"), self.close, "Ctrl+Q")
 
     def _build_header(self) -> QWidget:
         header = _Header(self)
@@ -268,26 +271,26 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(2)
         for icon, text, act in (
-            (style.ICON_NEW, "Nuevo", self.act_new),
-            (style.ICON_OPEN, "Abrir", self.act_open),
-            (style.ICON_SAVE, "Guardar", self.act_save),
+            (style.ICON_NEW, tr("Nuevo"), self.act_new),
+            (style.ICON_OPEN, tr("Abrir"), self.act_open),
+            (style.ICON_SAVE, tr("Guardar"), self.act_save),
             (style.ICON_WORD, "Word", self.act_word),
-            (style.ICON_PRINT, "Imprimir", self.act_print),
+            (style.ICON_PRINT, tr("Imprimir"), self.act_print),
         ):
             b = IconButton(icon, text, act.text().rstrip("…") + f"  ({act.shortcut().toString(QKeySequence.SequenceFormat.NativeText)})")
             b.clicked.connect(act.trigger)
             row.addWidget(b)
         row.addStretch(1)
-        self.mode_control = SegmentedControl(MODE_OPTIONS, header)
+        self.mode_control = SegmentedControl([(k, tr(t), tr(h)) for k, t, h in MODE_OPTIONS], header)
         self.mode_control.set_current(self.model.mode, animate=False)
         self.mode_control.changed.connect(self.set_mode)
         row.addWidget(self.mode_control, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch(1)
-        for size, text, act in ((12, "Letra −", self.act_smaller), (19, "Letra +", self.act_bigger)):
+        for size, text, act in ((12, tr("Letra −"), self.act_smaller), (19, tr("Letra +"), self.act_bigger)):
             b = IconButton("A", text, act.text(), glyph_font=style.display_font(size))
             b.clicked.connect(act.trigger)
             row.addWidget(b)
-        self.more_button = IconButton(style.ICON_MORE, "Más", "Más opciones")
+        self.more_button = IconButton(style.ICON_MORE, tr("Más"), tr("Más opciones"))
         self.more_button.clicked.connect(self._show_more_menu)
         row.addWidget(self.more_button)
         return header
@@ -297,24 +300,24 @@ class MainWindow(QMainWindow):
         panel = MenuPanel(self)
         recent = [f for f in self.settings.recent_files if Path(f).exists() and (not self.path or Path(f) != self.path)]
         if recent:
-            panel.add_section("Abrir de nuevo")
+            panel.add_section(tr("Abrir de nuevo"))
             for f in recent[:4]:
                 panel.add_row(style.ICON_RECENT, Path(f).stem, lambda f=f: self.maybe_save() and self.open_path(Path(f)))
-        panel.add_section("Documento")
-        panel.add_row(style.ICON_SAVE_AS, "Guardar con otro nombre…", self.act_save_as.trigger)
-        panel.add_row(style.ICON_EXPORT, "Exportar como texto…", self.act_export.trigger)
-        panel.add_row(style.ICON_IMPORT, "Importar un texto…", self.act_import.trigger)
-        panel.add_section("Corrección")
-        panel.add_row(style.ICON_BOOK, "Nombres y palabras especiales…", self.act_glossary.trigger)
-        panel.add_row(style.ICON_HIGHLIGHT, "Marcar lo que se ha corregido", self._toggle_highlight,
+        panel.add_section(tr("Documento"))
+        panel.add_row(style.ICON_SAVE_AS, tr("Guardar con otro nombre…"), self.act_save_as.trigger)
+        panel.add_row(style.ICON_EXPORT, tr("Exportar como texto…"), self.act_export.trigger)
+        panel.add_row(style.ICON_IMPORT, tr("Importar un texto…"), self.act_import.trigger)
+        panel.add_section(tr("Corrección"))
+        panel.add_row(style.ICON_BOOK, tr("Nombres y palabras especiales…"), self.act_glossary.trigger)
+        panel.add_row(style.ICON_HIGHLIGHT, tr("Marcar lo que se ha corregido"), self._toggle_highlight,
                       toggle=self.settings.highlight_changes)
         if any(self._can_retry(p) for p in self.model.paragraphs):
-            panel.add_row(style.ICON_WARNING, "Reintentar los párrafos sin corregir", self.act_retry.trigger)
-        panel.add_row(style.ICON_REFRESH, "Volver a corregir todo", self.act_correct_all.trigger)
+            panel.add_row(style.ICON_WARNING, tr("Reintentar los párrafos sin corregir"), self.act_retry.trigger)
+        panel.add_row(style.ICON_REFRESH, tr("Volver a corregir todo"), self.act_correct_all.trigger)
         panel.add_tiles([
-            (style.ICON_HELP, "Ayuda", self.act_help.trigger),
-            (style.ICON_SETTINGS, "Ajustes", self.act_settings.trigger),
-            (style.ICON_QUIT, "Salir", self.act_quit.trigger),
+            (style.ICON_HELP, tr("Ayuda"), self.act_help.trigger),
+            (style.ICON_SETTINGS, tr("Ajustes"), self.act_settings.trigger),
+            (style.ICON_QUIT, tr("Salir"), self.act_quit.trigger),
         ])
         panel.add_note(self._llm_text())
         return panel
@@ -330,11 +333,11 @@ class MainWindow(QMainWindow):
     def _refresh_status(self) -> None:
         state = self.canvas.mic.state
         if state == "loading":
-            text = "Preparando el micrófono…"
+            text = tr("Preparando el micrófono…")
         elif state == "listening":
-            text = "Le escucho. Hable con normalidad."
+            text = tr("Le escucho. Hable con normalidad.")
         elif not any(p.text.strip() for p in self.model.paragraphs):
-            text = "Pulse el botón y empiece a hablar"
+            text = tr("Pulse el botón y empiece a hablar")
         else:
             text = ""
         self.canvas.set_status(text)
@@ -374,7 +377,7 @@ class MainWindow(QMainWindow):
         self.act_dictate.setShortcut(key)
         self._dictate_qt_key = key[0].key()
         self.canvas.mic.setToolTip(
-            f"Empezar o parar de hablar  ({self.dictate_key_text()})\nSi lo mantiene pulsado, para al soltarlo."
+            tr("Empezar o parar de hablar  ({key})\nSi lo mantiene pulsado, para al soltarlo.", key=self.dictate_key_text())
         )
 
     def taken_shortcuts(self) -> dict[str, str]:
@@ -430,7 +433,7 @@ class MainWindow(QMainWindow):
             self.engine.request_paragraph_break()
         else:
             self.model.close_paragraph(correct=True)
-        self.notify("Párrafo nuevo")
+        self.notify(tr("Párrafo nuevo"))
 
     def set_mode(self, mode: str) -> None:
         self.model.mode = mode
@@ -441,12 +444,12 @@ class MainWindow(QMainWindow):
             current.mode = mode
         self.mode_control.set_current(mode)
         self.model.set_modified(True)
-        self.notify(dict((k, h) for k, _t, h in MODE_OPTIONS)[mode], 3500)
+        self.notify(tr(dict((k, h) for k, _t, h in MODE_OPTIONS)[mode]), 3500)
 
     def on_sentence(self, text: str) -> None:
         if self.suppress_dictation:
             return
-        actions = commands.parse(text) if self.settings.voice_commands else [commands.Text(text)]
+        actions = commands.parse(text, language()) if self.settings.voice_commands else [commands.Text(text)]
         for action in actions:
             if isinstance(action, commands.Text):
                 mode = self.model.mode
@@ -455,13 +458,13 @@ class MainWindow(QMainWindow):
                     self.model.append_sentence(piece, mode)
             elif isinstance(action, commands.NewParagraph):
                 self.model.close_paragraph(correct=True)
-                self.notify("Párrafo nuevo")
+                self.notify(tr("Párrafo nuevo"))
             elif isinstance(action, commands.DeleteLastSentence):
                 done = self.model.delete_last_sentence()
-                self.notify("He borrado la última frase" if done else "No hay ninguna frase que borrar")
+                self.notify(tr("He borrado la última frase") if done else tr("No hay ninguna frase que borrar"))
             elif isinstance(action, commands.Title):
                 self.model.add_title(action.text)
-                self.notify("Título añadido")
+                self.notify(tr("Título añadido"))
         self._refresh_status()
 
     def on_paragraph_break(self) -> None:
@@ -491,21 +494,21 @@ class MainWindow(QMainWindow):
     def _on_engine_error(self, message: str) -> None:
         low = message.lower()
         if "micr" in low or "portaudio" in low or "device" in low or "dispositivo" in low:
-            title, text = "No oigo el micrófono", "Compruebe que el micrófono está conectado y vuelva a pulsar el botón."
-        elif "transcrib" in low:
-            self.notify("No he entendido un trozo; siga hablando.")
+            title, text = tr("No oigo el micrófono"), tr("Compruebe que el micrófono está conectado y vuelva a pulsar el botón.")
+        elif "transcri" in low:
+            self.notify(tr("No he entendido un trozo; siga hablando."))
             return
         else:
-            title, text = "No he podido empezar a escuchar", "Vuelva a intentarlo. Si sigue pasando, reinicie el programa."
+            title, text = tr("No he podido empezar a escuchar"), tr("Vuelva a intentarlo. Si sigue pasando, reinicie el programa.")
         if not self.engine.running:
-            tell(self, title, f"{text}\n\n(Detalle: {message})", warning=True)
+            tell(self, title, text + "\n\n" + tr("(Detalle: {detail})", detail=message), warning=True)
         else:
             self.notify(title)
 
     # -- archivos -------------------------------------------------------------------------------------------------
 
     def _update_title(self) -> None:
-        name = self.path.stem if self.path else "Documento nuevo"
+        name = self.path.stem if self.path else tr("Documento nuevo")
         self.setWindowTitle(f"{'• ' if self.model.modified else ''}{name} — Dictador")
 
     def maybe_save(self) -> bool:
@@ -513,9 +516,9 @@ class MainWindow(QMainWindow):
             return True
         choice = ask(
             self,
-            "¿Quiere guardar lo que ha escrito?",
-            "Si no lo guarda, lo escrito desde la última vez que guardó se perderá.",
-            ["Guardar", "No guardar", "Cancelar"],
+            tr("¿Quiere guardar lo que ha escrito?"),
+            tr("Si no lo guarda, lo escrito desde la última vez que guardó se perderá."),
+            [tr("Guardar"), tr("No guardar"), tr("Cancelar")],
             icon=style.ICON_SAVE,
         )
         if choice == 0:
@@ -533,7 +536,7 @@ class MainWindow(QMainWindow):
         if not self.maybe_save():
             return
         start = str(self.path.parent) if self.path else str(documents_dir())
-        name, _ = QFileDialog.getOpenFileName(self, "Abrir un documento", start, FILE_FILTER)
+        name, _ = QFileDialog.getOpenFileName(self, tr("Abrir un documento"), start, tr(FILE_FILTER))
         if name:
             self.open_path(Path(name))
 
@@ -541,7 +544,7 @@ class MainWindow(QMainWindow):
         try:
             paragraphs, mode, glossary = storage.load(path)
         except storage.StorageError as e:
-            tell(self, "No se puede abrir ese documento", str(e), warning=True)
+            tell(self, tr("No se puede abrir ese documento"), str(e), warning=True)
             return False
         self.path = path
         self.model.load(paragraphs, mode=mode, glossary=glossary)
@@ -564,8 +567,8 @@ class MainWindow(QMainWindow):
         return self._save_to(self.path)
 
     def file_save_as(self) -> bool:
-        start = str(self.path) if self.path else str(documents_dir() / "Mi documento.dictador")
-        name, _ = QFileDialog.getSaveFileName(self, "Guardar el documento", start, FILE_FILTER)
+        start = str(self.path) if self.path else str(documents_dir() / (tr("Mi documento") + ".dictador"))
+        name, _ = QFileDialog.getSaveFileName(self, tr("Guardar el documento"), start, tr(FILE_FILTER))
         if not name:
             return False
         path = Path(name)
@@ -578,23 +581,24 @@ class MainWindow(QMainWindow):
         try:
             storage.save(path, self.model.paragraphs, self.model.mode, self.model.glossary)
         except OSError as e:
-            tell(self, "No se ha podido guardar", f"Pruebe a guardarlo en otra carpeta.\n\n(Detalle: {e})", warning=True)
+            tell(self, tr("No se ha podido guardar"),
+                 tr("Pruebe a guardarlo en otra carpeta.") + "\n\n" + tr("(Detalle: {detail})", detail=e), warning=True)
             return False
         self.path = path
         self.model.set_modified(False)
         self.settings.add_recent(str(path))
         self._update_title()
         self.clear_recovery()
-        self.notify("Guardado")
+        self.notify(tr("Guardado"))
         return True
 
     def _export_base(self) -> Path:
-        return self.path.with_suffix("") if self.path else documents_dir() / "Mi documento"
+        return self.path.with_suffix("") if self.path else documents_dir() / tr("Mi documento")
 
     def file_export_word(self) -> None:
         self.editor.reconcile()
         name, _ = QFileDialog.getSaveFileName(
-            self, "Guardar como documento de Word", str(self._export_base()) + ".docx", "Documento de Word (*.docx)"
+            self, tr("Guardar como documento de Word"), str(self._export_base()) + ".docx", tr("Documento de Word (*.docx)")
         )
         if not name:
             return
@@ -602,26 +606,28 @@ class MainWindow(QMainWindow):
         try:
             storage.export(path, self.model.paragraphs)
         except (OSError, storage.StorageError) as e:
-            tell(self, "No se ha podido guardar", f"¿Está ese documento abierto en Word? Ciérrelo y vuelva a probar.\n\n(Detalle: {e})", warning=True)
+            tell(self, tr("No se ha podido guardar"),
+                 tr("¿Está ese documento abierto en Word? Ciérrelo y vuelva a probar.") + "\n\n"
+                 + tr("(Detalle: {detail})", detail=e), warning=True)
             return
-        self.notify(f"Guardado como documento de Word: {path.name}", 3500)
+        self.notify(tr("Guardado como documento de Word: {name}", name=path.name), 3500)
 
     def file_export(self) -> None:
         self.editor.reconcile()
         name, chosen = QFileDialog.getSaveFileName(
-            self, "Exportar", str(self._export_base()) + ".txt", "Texto (*.txt);;Markdown (*.md);;Documento de Word (*.docx)"
+            self, tr("Exportar"), str(self._export_base()) + ".txt", tr("Texto (*.txt);;Markdown (*.md);;Documento de Word (*.docx)")
         )
         if not name:
             return
         path = Path(name)
         if path.suffix.lower() not in (".docx", ".md", ".txt"):
-            path = path.with_suffix({"Markdown": ".md", "Documento de Word": ".docx"}.get(chosen.split(" (")[0], ".txt"))
+            path = path.with_suffix({"Markdown": ".md", tr("Documento de Word"): ".docx"}.get(chosen.split(" (")[0], ".txt"))
         try:
             storage.export(path, self.model.paragraphs)
         except (OSError, storage.StorageError) as e:
-            tell(self, "No se ha podido exportar", str(e), warning=True)
+            tell(self, tr("No se ha podido exportar"), str(e), warning=True)
             return
-        self.notify(f"Exportado: {path.name}")
+        self.notify(tr("Exportado: {name}", name=path.name))
 
     def file_print(self) -> None:
         from PySide6.QtPrintSupport import QPrintDialog, QPrinter
@@ -629,11 +635,11 @@ class MainWindow(QMainWindow):
         self.editor.reconcile()
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         dialog = QPrintDialog(printer, self)
-        dialog.setWindowTitle("Imprimir")
+        dialog.setWindowTitle(tr("Imprimir"))
         if dialog.exec() != QPrintDialog.DialogCode.Accepted:
             return
         self.printable_document().print_(printer)
-        self.notify("Enviado a la impresora")
+        self.notify(tr("Enviado a la impresora"))
 
     def printable_document(self) -> QTextDocument:
         """El texto limpio, sin marcas ni lo que se está diciendo en ese momento, para imprimirlo."""
@@ -655,30 +661,30 @@ class MainWindow(QMainWindow):
     def file_import(self) -> None:
         if not self.maybe_save():
             return
-        name, _ = QFileDialog.getOpenFileName(self, "Importar un texto", str(documents_dir()), "Texto o Markdown (*.txt *.md)")
+        name, _ = QFileDialog.getOpenFileName(self, tr("Importar un texto"), str(documents_dir()), tr("Texto o Markdown (*.txt *.md)"))
         if not name:
             return
         try:
             paragraphs = storage.import_text(name, mode=self.model.mode)
         except OSError as e:
-            tell(self, "No se puede leer ese archivo", str(e), warning=True)
+            tell(self, tr("No se puede leer ese archivo"), str(e), warning=True)
             return
         self.path = None
         self.model.load(paragraphs, mode=self.model.mode, glossary=[])
         self.model.set_modified(True)
         self._update_title()
-        self.notify(f"Importados {len(paragraphs)} párrafos")
+        self.notify(tr("Importados {count} párrafos", count=len(paragraphs)))
 
     def change_font(self, step: int) -> None:
         current = self.settings.font_size
         sizes = sorted(set(FONT_SIZES) | {current})
         i = sizes.index(current) + step
         if not 0 <= i < len(sizes):
-            self.notify("Es el tamaño " + ("más grande" if step > 0 else "más pequeño"))
+            self.notify(tr("Es el tamaño más grande") if step > 0 else tr("Es el tamaño más pequeño"))
             return
         self.settings.font_size = sizes[i]
         self.editor.set_text_font(style.DOCUMENT_FONT, sizes[i])
-        self.notify(f"Tamaño de letra: {sizes[i]}")
+        self.notify(tr("Tamaño de letra: {size}", size=sizes[i]))
 
     # -- recuperación ---------------------------------------------------------------------------------------------
 
@@ -708,9 +714,9 @@ class MainWindow(QMainWindow):
             return
         choice = ask(
             self,
-            "¿Recuperamos lo que estaba escribiendo?",
-            "La última vez el programa se cerró sin guardar. Podemos recuperar lo que estaba escribiendo.",
-            ["Recuperar", "No, empezar de cero"],
+            tr("¿Recuperamos lo que estaba escribiendo?"),
+            tr("La última vez el programa se cerró sin guardar. Podemos recuperar lo que estaba escribiendo."),
+            [tr("Recuperar"), tr("No, empezar de cero")],
             icon=style.ICON_IDEA,
         )
         if choice != 0:
@@ -720,7 +726,7 @@ class MainWindow(QMainWindow):
             paragraphs, mode, glossary = storage.load(data)
             original = json.loads(meta.read_text(encoding="utf-8")).get("path") if meta.exists() else None
         except (storage.StorageError, OSError, ValueError) as e:
-            tell(self, "No se ha podido recuperar", str(e), warning=True)
+            tell(self, tr("No se ha podido recuperar"), str(e), warning=True)
             return
         self.path = Path(original) if original else None
         self.model.load(paragraphs, mode=mode, glossary=glossary)
@@ -772,7 +778,7 @@ class MainWindow(QMainWindow):
         if not Path(exe).is_file() or not Path(gguf).is_file():
             self._stop_server()
             self.corrector.set_client(None)
-            self._on_llm_status("error", "Falta descargar el corrector (Más › Ajustes › Corrector).")
+            self._on_llm_status("error", tr("Falta descargar el corrector (Más › Ajustes › Corrector)."))
             return
         layers = s.managed_gpu_layers if s.managed_device == "gpu" else 0
         config = (exe, gguf, s.managed_port, layers, s.managed_ctx)
@@ -823,7 +829,8 @@ class MainWindow(QMainWindow):
                 max_distance=s.guard_max_distance,
                 max_length_change=s.guard_max_length_change,
                 max_removed=s.guard_max_removed,
-                prompt=s.custom_prompts.get(p.mode, ""),
+                prompt=s.custom_prompts.get(f"{language()}/{p.mode}", ""),
+                lang=language(),
             )
         )
 
@@ -848,11 +855,11 @@ class MainWindow(QMainWindow):
     def _llm_text(self) -> str:
         state, detail = self._llm_state
         return {
-            "ok": "Corrector: listo" + (" (simulado)" if self.fake_llm else ""),
-            "corrigiendo": "Corrector: corrigiendo…",
-            "arrancando": "Corrector: preparándose…",
-            "error": f"Corrector: no disponible ({detail})" if detail else "Corrector: no disponible",
-        }.get(state, "Corrector: sin configurar")
+            "ok": tr("Corrector: listo") + (tr(" (simulado)") if self.fake_llm else ""),
+            "corrigiendo": tr("Corrector: corrigiendo…"),
+            "arrancando": tr("Corrector: preparándose…"),
+            "error": tr("Corrector: no disponible ({detail})", detail=detail) if detail else tr("Corrector: no disponible"),
+        }.get(state, tr("Corrector: sin configurar"))
 
     def show_diff(self, pid: str) -> None:
         p = self.model.get(pid)
@@ -871,10 +878,10 @@ class MainWindow(QMainWindow):
     def recorrect_all(self) -> None:
         choice = ask(
             self,
-            "¿Volver a corregir todo?",
-            "Se volverán a corregir todos los párrafos dictados que no haya cambiado a mano, partiendo de lo que se "
-            "oyó al dictar.",
-            ["Corregir de nuevo", "Cancelar"],
+            tr("¿Volver a corregir todo?"),
+            tr("Se volverán a corregir todos los párrafos dictados que no haya cambiado a mano, partiendo de lo que se "
+               "oyó al dictar."),
+            [tr("Corregir de nuevo"), tr("Cancelar")],
         )
         if choice != 0:
             return
@@ -912,7 +919,25 @@ class MainWindow(QMainWindow):
         self.engine.set_mode(self.model.mode)  # las pausas se aplican en caliente
         self.configure_llm()
         if restart:
-            self.notify("Los cambios del micrófono se aplican al volver a pulsar «Empezar a hablar».", 4000)
+            self.notify(tr("Los cambios del micrófono se aplican al volver a pulsar «Empezar a hablar»."), 4000)
+        if (new.language or system_language()) != language():
+            choice = ask(self, tr("Cambiar el idioma"),
+                         tr("Para cambiar el idioma hay que reiniciar Dictador. Si tiene algo sin guardar, "
+                            "se le preguntará antes."),
+                         [tr("Reiniciar ahora"), tr("Más tarde")], icon=style.ICON_REFRESH)
+            if choice == 0:
+                self.restart_app()
+
+    def restart_app(self) -> None:
+        """Vuelve a abrir el programa (con el mismo documento) para aplicar el idioma."""
+        if not self.close():  # ha cancelado al preguntarle si guardar
+            return
+        args = [] if getattr(sys, "frozen", False) else ["-m", "dictador"]
+        args += ["--fake-asr"] * self.fake_asr + ["--fake-llm"] * self.fake_llm
+        if self.path is not None:
+            args.append(str(self.path))
+        QProcess.startDetached(sys.executable, args)
+        QApplication.instance().quit()
 
     def save_settings(self) -> None:
         try:

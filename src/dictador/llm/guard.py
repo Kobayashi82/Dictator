@@ -7,17 +7,21 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from dictador.i18n import tr
+
 _THINK = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
 _UNCLOSED_THINK = re.compile(r"^.*?</think>\s*", re.DOTALL | re.IGNORECASE)
 _FENCE = re.compile(r"^```[a-zA-Z]*\s*\n(.*?)\n?```\s*$", re.DOTALL)
 _TAG_WRAP = re.compile(r"^<([a-zA-Z_]+)>\s*(.*?)\s*</\1>$", re.DOTALL)
 _PREAMBLE = re.compile(
-    r"^\s*(?:¡?claro[!,.]?\s*|por supuesto[,.]?\s*|vale[,.]?\s*)?"
+    r"^\s*(?:¡?claro[!,.]?\s*|por supuesto[,.]?\s*|vale[,.]?\s*|sure[!,.]?\s*|of course[!,.]?\s*|okay[!,.]?\s*)?"
     r"(?:aqu[ií] (?:tienes|est[aá])|este es|a continuaci[oó]n|te dejo|texto corregido|versi[oó]n corregida|"
-    r"correcci[oó]n|here is|corrected text)[^\n:]*:\s*\n*",
+    r"correcci[oó]n|here is|here's|this is the|below is|corrected text|corrected version)[^\n:]*:\s*\n*",
     re.IGNORECASE,
 )
-_LABEL = re.compile(r"^\s*(?:texto(?: corregido)?|resultado|salida|output)\s*:\s*", re.IGNORECASE)
+_LABEL = re.compile(
+    r"^\s*(?:texto(?: corregido)?|resultado|salida|output|(?:corrected )?text|result)\s*:\s*", re.IGNORECASE
+)
 _QUOTES = [("«", "»"), ('"', '"'), ("“", "”"), ("'", "'"), ("‘", "’")]
 _LIST_MARK = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+", re.MULTILINE)
 
@@ -73,7 +77,9 @@ def levenshtein(a: str, b: str) -> int:
 
 _ORDINALS = re.compile(
     r"\b(?:primer[oa]?|segund[oa]|tercer[oa]?|cuart[oa]|quint[oa]|sext[oa]|s[eé]ptim[oa]|octav[oa]|noven[oa]|"
-    r"d[eé]cim[oa]|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|y|luego|despu[eé]s|por [uú]ltimo)\b",
+    r"d[eé]cim[oa]|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|y|luego|despu[eé]s|por [uú]ltimo|"
+    r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|one|two|three|four|five|six|seven|eight|"
+    r"nine|ten|and|then|after that|finally|lastly)\b",
     re.IGNORECASE,
 )
 _PUNCT = re.compile(r"[^\w\s]")
@@ -135,13 +141,13 @@ def validate(
     """Devuelve la corrección limpia si es aceptable o el motivo del rechazo."""
     text = clean_output(output, raw)
     if not text:
-        return GuardResult(False, "", "El corrector no devolvió texto.")
+        return GuardResult(False, "", tr("El corrector no devolvió texto."))
 
     if mode == "poesia":
         raw_lines = [line for line in raw.strip().split("\n") if line.strip()]
         out_lines = [line for line in text.split("\n") if line.strip()]
         if len(raw_lines) != len(out_lines):
-            return GuardResult(False, text, f"Cambia el número de versos ({len(raw_lines)} → {len(out_lines)}).")
+            return GuardResult(False, text, tr("Cambia el número de versos ({before} → {after}).", before=len(raw_lines), after=len(out_lines)))
         text = "\n".join(line.strip() for line in out_lines)
 
     if mode == "prosa":
@@ -154,11 +160,11 @@ def validate(
     # En textos cortos unos pocos signos ya son mucho porcentaje: se permite un margen absoluto.
     length_diff = abs(len(b) - len(a))
     if length_diff > 8 and length_diff / max(len(a), 1) > max_length_change:
-        return GuardResult(False, text, f"La longitud cambia un {length_diff / max(len(a), 1):.0%}.")
+        return GuardResult(False, text, tr("La longitud cambia un {pct}.", pct=f"{length_diff / max(len(a), 1):.0%}"))
 
     distance = levenshtein(a, b)
     if distance > 6 and distance / longest > max_distance:
-        return GuardResult(False, text, f"Cambia demasiado el texto ({distance / longest:.0%} de diferencia).")
+        return GuardResult(False, text, tr("Cambia demasiado el texto ({pct} de diferencia).", pct=f"{distance / longest:.0%}"))
 
     return GuardResult(True, text)
 
@@ -170,10 +176,10 @@ def _validate_prose(raw: str, text: str, max_new: float, max_growth: float, max_
     total = max(total, 1)
     # Unas pocas palabras siempre se permiten: en un texto corto ya son mucho porcentaje.
     if added > 2 and added / total > max_new:
-        return GuardResult(False, text, f"Añade o cambia demasiadas palabras ({added} de {total}).")
+        return GuardResult(False, text, tr("Añade o cambia demasiadas palabras ({count} de {total}).", count=added, total=total))
     if removed > 3 and removed / total > max_removed:
-        return GuardResult(False, text, f"Quita demasiado texto ({removed} de {total} palabras).")
+        return GuardResult(False, text, tr("Quita demasiado texto ({count} de {total} palabras).", count=removed, total=total))
     growth = len(text) - len(raw.strip())
     if growth > 8 and growth / max(len(raw.strip()), 1) > max_growth:
-        return GuardResult(False, text, f"La longitud crece un {growth / max(len(raw.strip()), 1):.0%}.")
+        return GuardResult(False, text, tr("La longitud crece un {pct}.", pct=f"{growth / max(len(raw.strip()), 1):.0%}"))
     return GuardResult(True, text)

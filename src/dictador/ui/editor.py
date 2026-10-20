@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QMenu, QTextEdit, QToolTip
 
 from dictador.doc.model import DocumentModel, Paragraph
+from dictador.i18n import N_, tr
 from dictador.ui import style
 
 LINE_SEP = " "  # salto de línea dentro de un bloque (versos)
@@ -29,13 +30,13 @@ MARGIN = 26  # margen mínimo; el de la hoja lo fija set_page_margins
 PARTIAL_STATE = -2  # bloque que solo contiene el texto en vivo (no pertenece al modelo)
 
 STATUS_TEXT = {
-    "dictating": "Dictando…",
-    "closed": "Sin corregir",
-    "pending": "En cola para corregir",
-    "correcting": "Corrigiendo…",
-    "corrected": "Corregido",
-    "rejected": "Corrección descartada",
-    "edited": "Editado a mano",
+    "dictating": N_("Dictando…"),
+    "closed": N_("Sin corregir"),
+    "pending": N_("En cola para corregir"),
+    "correcting": N_("Corrigiendo…"),
+    "corrected": N_("Corregido"),
+    "rejected": N_("Corrección descartada"),
+    "edited": N_("Editado a mano"),
 }
 
 _TOKENS = re.compile(r"\s+|[^\s]+")
@@ -103,8 +104,8 @@ class DictationEditor(QTextEdit):
         self.setTabChangesFocus(False)
         self.document().setDocumentMargin(MARGIN)
         self.setMouseTracking(True)
-        self.setPlaceholderText("Pulse «Empezar a hablar» y diga lo que quiera escribir.\n"
-                                "También puede escribir aquí con el teclado.")
+        self.setPlaceholderText(tr("Pulse «Empezar a hablar» y diga lo que quiera escribir.\n"
+                                   "También puede escribir aquí con el teclado."))
 
         self.document().contentsChange.connect(self._on_contents_change)
         model.reset.connect(self.rebuild)
@@ -525,9 +526,9 @@ class DictationEditor(QTextEdit):
             pid = self.paragraph_at(pos) if self._in_margin(pos) else None
             p = self.model.get(pid) if pid else None
             if p is not None:
-                tip = STATUS_TEXT.get(p.status, p.status)
+                tip = tr(STATUS_TEXT.get(p.status, p.status))
                 if p.status == "corrected" and p.show_raw:
-                    tip = "Corregido (mostrando el original)"
+                    tip = tr("Corregido (mostrando el original)")
                 if p.reason:
                     tip += f"\n{p.reason}"
                 QToolTip.showText(event.globalPos(), tip, self.viewport())
@@ -548,15 +549,15 @@ class DictationEditor(QTextEdit):
         p = self.model.get(pid)
         if p is None:
             return
-        title = QAction(STATUS_TEXT.get(p.status, p.status), menu)
+        title = QAction(tr(STATUS_TEXT.get(p.status, p.status)), menu)
         title.setEnabled(False)
         menu.addAction(title)
-        diff = menu.addAction("Ver cambios…")
+        diff = menu.addAction(tr("Ver cambios…"))
         diff.setEnabled(p.corrected is not None and p.status in ("corrected", "edited") and p.corrected != p.raw)
         diff.triggered.connect(lambda: self.show_diff.emit(pid))
-        rev = menu.addAction("Mostrar la corrección" if p.show_raw else "Revertir al original")
+        rev = menu.addAction(tr("Mostrar la corrección") if p.show_raw else tr("Revertir al original"))
         rev.setEnabled(p.status == "corrected")
         rev.triggered.connect(lambda: self.revert.emit(pid))
-        again = menu.addAction("Volver a corregir")
+        again = menu.addAction(tr("Volver a corregir"))
         again.setEnabled(p.status not in ("dictating", "pending", "correcting") and p.style != "title")
         again.triggered.connect(lambda: self.recorrect.emit(pid))

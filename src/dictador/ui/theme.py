@@ -5,10 +5,11 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
+from dictador.i18n import N_
 from dictador.ui import style
 
 THEMES = ("claro", "oscuro", "sistema")
-THEME_LABELS = {"claro": "Claro", "oscuro": "Oscuro", "sistema": "Como Windows"}
+THEME_LABELS = {"claro": N_("Claro"), "oscuro": N_("Oscuro"), "sistema": N_("Como Windows")}
 
 _current = "claro"
 _listening = False

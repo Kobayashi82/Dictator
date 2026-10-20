@@ -35,9 +35,15 @@ class Title:
 
 Action = Text | NewParagraph | DeleteLastSentence | Title
 
-PARAGRAPH_PHRASES = ("punto y aparte", "nuevo parrafo", "nueva estrofa")
-DELETE_PHRASES = ("borra la ultima frase", "borrar la ultima frase", "borra ultima frase", "borra la frase anterior")
-TITLE_WORDS = ("titulo",)
+PARAGRAPH_PHRASES = {
+    "es": ("punto y aparte", "nuevo parrafo", "nueva estrofa"),
+    "en": ("new paragraph", "next paragraph", "new stanza"),
+}
+DELETE_PHRASES = {
+    "es": ("borra la ultima frase", "borrar la ultima frase", "borra ultima frase", "borra la frase anterior"),
+    "en": ("delete last sentence", "delete the last sentence", "remove the last sentence", "scratch that"),
+}
+TITLE_WORDS = {"es": ("titulo",), "en": ("title",)}
 THRESHOLD = 0.85
 
 
@@ -106,9 +112,14 @@ def similarity(a: str, b: str) -> float:
     return 1.0 if longest == 0 else 1 - levenshtein(a, b) / longest
 
 
-def _sounds_like(said: str, phrases: tuple[str, ...]) -> bool:
-    key = phonetic_key(said)
-    return any(similarity(key, phonetic_key(p)) >= THRESHOLD for p in phrases)
+def _key(text: str, lang: str) -> str:
+    # La clave fonética es española; en inglés basta con comparar las letras (sin espacios ni signos).
+    return phonetic_key(text) if lang == "es" else fold(text).replace(" ", "")
+
+
+def _sounds_like(said: str, phrases: tuple[str, ...], lang: str = "es") -> bool:
+    key = _key(said, lang)
+    return any(similarity(key, _key(p, lang)) >= THRESHOLD for p in phrases)
 
 
 def _words(text: str) -> list[re.Match]:
@@ -117,6 +128,7 @@ def _words(text: str) -> list[re.Match]:
 
 _VERSE_END = re.compile(
     r"(?<!\bSr\.)(?<!\bSra\.)(?<!\bDr\.)(?<!\bDra\.)(?<!\bSto\.)(?<!\bSta\.)(?<!\bUd\.)"
+    r"(?<!\bMr\.)(?<!\bMrs\.)(?<!\bMs\.)(?<!\bSt\.)"
     r"(?<=[.!?…;])\s+(?=[¡¿«\"“(]?[A-ZÁÉÍÓÚÑ])"
 )
 
@@ -127,32 +139,32 @@ def split_verses(text: str) -> list[str]:
     return [v.strip() for v in _VERSE_END.split(text.strip()) if v.strip()]
 
 
-def parse(sentence: str) -> list[Action]:
+def parse(sentence: str, lang: str = "es") -> list[Action]:
     """Convierte una frase en acciones. Lo que no es un comando sale tal cual como `Text`."""
     sentence = sentence.strip()
     folded = fold(sentence)
     if not folded:
         return [Text(sentence)] if sentence else []
 
-    if _sounds_like(folded, PARAGRAPH_PHRASES):
+    if _sounds_like(folded, PARAGRAPH_PHRASES[lang], lang):
         return [NewParagraph()]
-    if _sounds_like(folded, DELETE_PHRASES):
+    if _sounds_like(folded, DELETE_PHRASES[lang], lang):
         return [DeleteLastSentence()]
 
     words = _words(sentence)
     first = fold(words[0].group(0))
     # Para el título, la palabra exacta: «títulos», «titular»… son texto normal.
-    if first in TITLE_WORDS and len(words) > 1:
+    if first in TITLE_WORDS[lang] and len(words) > 1:
         rest = sentence[words[1].start() :].strip(" ,.:;")
         if rest:
             return [Title(rest[0].upper() + rest[1:])]
 
     # «…y se fue. Punto y aparte.»: el comando al final de una frase más larga.
-    for phrase in PARAGRAPH_PHRASES:
+    for phrase in PARAGRAPH_PHRASES[lang]:
         n = len(phrase.split())
         if len(words) > n:
             tail = " ".join(w.group(0) for w in words[-n:])
-            if _sounds_like(tail, (phrase,)):
+            if _sounds_like(tail, (phrase,), lang):
                 before = sentence[: words[-n].start()].rstrip(" ,;:")
                 return [Text(before), NewParagraph()] if fold(before) else [NewParagraph()]
 

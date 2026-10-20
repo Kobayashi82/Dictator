@@ -10,6 +10,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from dictador.i18n import tr
+
 
 def free_port(preferred: int) -> int:
     """El puerto pedido si está libre; si no (p. ej. un llama-server de otra sesión), otro que dé el sistema."""
@@ -20,7 +22,7 @@ def free_port(preferred: int) -> int:
             except OSError:
                 continue
             return s.getsockname()[1]
-    raise OSError("No hay ningún puerto libre para el corrector.")
+    raise OSError(tr("No hay ningún puerto libre para el corrector."))
 
 
 _job = None  # trabajo de Windows al que pertenecen los llama-server: muere con este proceso
@@ -101,9 +103,9 @@ class ManagedServer:
 
     def start(self) -> None:
         if not Path(self.exe).is_file():
-            raise FileNotFoundError(f"No se encuentra llama-server: {self.exe}")
+            raise FileNotFoundError(tr("No se encuentra llama-server: {path}", path=self.exe))
         if not Path(self.model).is_file():
-            raise FileNotFoundError(f"No se encuentra el modelo: {self.model}")
+            raise FileNotFoundError(tr("No se encuentra el modelo: {path}", path=self.model))
         self.port = free_port(self.requested_port)
         args = [
             self.exe,
@@ -130,7 +132,7 @@ class ManagedServer:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._proc is None or self._proc.poll() is not None:
-                self.error = f"llama-server se cerró al arrancar (mira {self.log_path})."
+                self.error = tr("llama-server se cerró al arrancar (mira {path}).", path=self.log_path)
                 self.ready.set()
                 return
             try:
@@ -141,7 +143,7 @@ class ManagedServer:
             except OSError:
                 pass  # aún cargando (503) o sin escuchar
             time.sleep(0.5)
-        self.error = "llama-server no respondió a tiempo."
+        self.error = tr("llama-server no respondió a tiempo.")
         self.ready.set()
 
     def stop(self) -> None:

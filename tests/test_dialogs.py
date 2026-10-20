@@ -102,7 +102,7 @@ def test_settings_custom_prompt_edit_and_restore(app):
     from dictador.llm.prompts import PRESETS
     from dictador.ui.settings import SettingsDialog
 
-    original = Settings(custom_prompts={"poesia": "Corrige solo las tildes."})
+    original = Settings(custom_prompts={"es/poesia": "Corrige solo las tildes.", "en/prosa": "Fix only commas."})
     dialog = SettingsDialog(original)
     assert dialog.result_settings() == original
     assert dialog.prompt.toPlainText() == PRESETS["prosa"] and not dialog.prompt_reset.isEnabled()
@@ -111,7 +111,8 @@ def test_settings_custom_prompt_edit_and_restore(app):
     assert dialog.prompt.toPlainText() == "Corrige solo las tildes." and dialog.prompt_reset.isEnabled()
     dialog.prompt_reset.click()
     assert dialog.prompt.toPlainText() == PRESETS["poesia"]
-    assert dialog.result_settings().custom_prompts == {"prosa": "Corrige como un profesor de lengua."}
+    assert dialog.result_settings().custom_prompts == {"es/prosa": "Corrige como un profesor de lengua.",
+                                                       "en/prosa": "Fix only commas."}
 
 
 def test_settings_dictate_key(app):

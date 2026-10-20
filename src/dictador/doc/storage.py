@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dictador.doc.model import Paragraph
+from dictador.i18n import tr
 
 FORMAT = "dictador"
 OLD_FORMATS = ("dictado",)  # versiones anteriores del programa, que se llamaba «Dictado»
@@ -60,13 +61,13 @@ def load(path: str | Path) -> tuple[list[Paragraph], str, list[str]]:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except OSError as e:
-        raise StorageError(f"No se puede leer el archivo: {e}") from e
+        raise StorageError(tr("No se puede leer el archivo: {error}", error=e)) from e
     except ValueError as e:
-        raise StorageError(f"El archivo no es un proyecto válido: {e}") from e
+        raise StorageError(tr("El archivo no es un proyecto válido: {error}", error=e)) from e
     if not isinstance(data, dict) or data.get("format") not in (FORMAT, *OLD_FORMATS):
-        raise StorageError("El archivo no es un documento de Dictador.")
+        raise StorageError(tr("El archivo no es un documento de Dictador."))
     if int(data.get("version", 0)) > VERSION:
-        raise StorageError("El proyecto es de una versión más nueva de Dictador.")
+        raise StorageError(tr("El proyecto es de una versión más nueva de Dictador."))
     paragraphs = [Paragraph.from_dict(p) for p in data.get("paragraphs", []) if isinstance(p, dict)]
     return paragraphs, data.get("mode", "prosa"), list(data.get("glossary", []))
 
@@ -136,7 +137,7 @@ def export(path: str | Path, paragraphs: list[Paragraph]) -> None:
     elif suffix == ".txt":
         _atomic_write(path, export_text(paragraphs))
     else:
-        raise StorageError(f"Formato de exportación no admitido: {suffix}")
+        raise StorageError(tr("Formato de exportación no admitido: {suffix}", suffix=suffix))
 
 
 # -- importar ---------------------------------------------------------------------------------------------------------

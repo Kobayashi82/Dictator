@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from dictador.i18n import tr
 from dictador.models.download import (
     LLM_PACKS,
     VOICE_PACKS,
@@ -25,6 +26,9 @@ from dictador.models.download import (
     download_packs,
     pack_present,
 )
+
+
+CANCELLED = "cancelada"  # lo que devuelve el hilo de descarga si se cancela
 
 
 def _mb(n: int) -> str:
@@ -40,17 +44,17 @@ class ModelsDialog(QDialog):
     def __init__(self, models_dir: Path, parent=None, first_run: bool = False, include_llm: bool = False):
         super().__init__(parent)
         self.models_dir = Path(models_dir)
-        self.setWindowTitle("Bienvenido a Dictador" if first_run else "Modelos")
+        self.setWindowTitle(tr("Bienvenida a Dictador") if first_run else tr("Modelos"))
         self.setMinimumWidth(520)
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
 
         layout = QVBoxLayout(self)
         intro = (
-            "Para dictar hacen falta dos modelos que funcionan en tu equipo, sin conexión. "
-            "Se descargan una sola vez desde Hugging Face y se verifica su integridad."
+            tr("Para dictar hacen falta dos modelos que funcionan en su equipo, sin conexión. "
+               "Se descargan una sola vez desde Hugging Face y se verifica su integridad.")
             if first_run
-            else "Modelos instalados en:"
+            else tr("Modelos instalados en:")
         )
         label = QLabel(intro)
         label.setWordWrap(True)
@@ -62,17 +66,17 @@ class ModelsDialog(QDialog):
         self._checks: list[tuple[QCheckBox, ModelPack]] = []
         for pack in (*VOICE_PACKS, *LLM_PACKS):
             present = pack_present(self.models_dir, pack)
-            text = f"{pack.title} — {_mb(pack.size)} · licencia {pack.license}"
+            text = tr("{title} — {size} · licencia {license}", title=pack.title, size=_mb(pack.size), license=pack.license)
             if present:
-                text += "  ✓ instalado"
+                text += tr("  ✓ instalado")
             box = QCheckBox(text)
             box.setChecked(not present and (pack not in LLM_PACKS or include_llm))
             box.setEnabled(not present)
             layout.addWidget(box)
             self._checks.append((box, pack))
         note = QLabel(
-            "<small>Los dos últimos son el corrector: corrige las faltas y la puntuación en este equipo, "
-            "sin conexión.</small>"
+            "<small>" + tr("Los dos últimos son el corrector: corrige las faltas y la puntuación en este equipo, "
+                           "sin conexión.") + "</small>"
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -86,10 +90,10 @@ class ModelsDialog(QDialog):
 
         buttons = QHBoxLayout()
         buttons.addStretch()
-        self.download_button = QPushButton("Descargar")
+        self.download_button = QPushButton(tr("Descargar"))
         self.download_button.setDefault(True)
         self.download_button.clicked.connect(self.start)
-        self.close_button = QPushButton("Más tarde" if first_run else "Cerrar")
+        self.close_button = QPushButton(tr("Más tarde") if first_run else tr("Cerrar"))
         self.close_button.clicked.connect(self.reject)
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.close_button)
@@ -108,7 +112,8 @@ class ModelsDialog(QDialog):
     def _refresh_button(self) -> None:
         packs = self._selected()
         self.download_button.setEnabled(bool(packs) and self._thread is None)
-        self.download_button.setText(f"Descargar ({_mb(sum(p.size for p in packs))})" if packs else "Descargar")
+        self.download_button.setText(tr("Descargar ({size})", size=_mb(sum(p.size for p in packs))) if packs
+                                     else tr("Descargar"))
 
     def start(self) -> None:
         packs = self._selected()
@@ -118,16 +123,16 @@ class ModelsDialog(QDialog):
         for box, _ in self._checks:
             box.setEnabled(False)
         self.download_button.setEnabled(False)
-        self.close_button.setText("Cancelar")
+        self.close_button.setText(tr("Cancelar"))
         worker, cancel, folder = self._worker, self._cancel, self.models_dir
 
         def run():
             try:
                 download_packs(packs, folder, lambda d, t, s: worker.progress.emit(d, t, s), cancel)
             except DownloadCancelled:
-                worker.finished.emit("Descarga cancelada.")
+                worker.finished.emit(CANCELLED)
             except Exception as e:  # noqa: BLE001
-                worker.finished.emit(f"No se pudo descargar: {e}")
+                worker.finished.emit(tr("No se pudo descargar: {error}", error=e))
             else:
                 worker.finished.emit("")
 
@@ -136,26 +141,26 @@ class ModelsDialog(QDialog):
 
     def _on_progress(self, done, total, text: str) -> None:
         self.bar.setValue(int(done * 1000 / max(total, 1)))
-        self.status.setText(f"{text} — {_mb(done)} de {_mb(total)}")
+        self.status.setText(tr("{what} — {done} de {total}", what=text, done=_mb(done), total=_mb(total)))
 
     def _on_finished(self, error: str) -> None:
         self._thread = None
-        self.close_button.setText("Cerrar")
+        self.close_button.setText(tr("Cerrar"))
         if error:
-            self.status.setText(error)
+            self.status.setText(tr("Descarga cancelada.") if error == CANCELLED else error)
             for box, pack in self._checks:
                 box.setEnabled(not pack_present(self.models_dir, pack))
             self._refresh_button()
-            if "cancelada" not in error:
-                QMessageBox.warning(self, "Modelos", error)
+            if error != CANCELLED:
+                QMessageBox.warning(self, tr("Modelos"), error)
             return
         self.bar.setValue(1000)
-        self.status.setText("Modelos listos.")
+        self.status.setText(tr("Modelos listos."))
         self.accept()
 
     def reject(self) -> None:
         if self._thread is not None:
             self._cancel.set()  # el hilo termina y llama a _on_finished
-            self.status.setText("Cancelando…")
+            self.status.setText(tr("Cancelando…"))
             return
         super().reject()

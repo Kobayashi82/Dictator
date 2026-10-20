@@ -21,10 +21,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dictador.i18n import N_, tr
 from dictador.ui import style
 from dictador.ui.widgets import Badge, Combo, MicButton, SoftProgress, StepDots
 
-TEST_PHRASE = "Hoy hace un día precioso"
+TEST_PHRASE = N_("Hoy hace un día precioso")
 
 
 def _title(text: str) -> QLabel:
@@ -83,9 +84,9 @@ class DownloadPage(_Page):
         super().__init__(
             style.ICON_DOWNLOAD,
             "ACCENT",
-            "Preparando todo",
-            "Estamos descargando lo que el programa necesita para entender su voz y corregir el texto.\n"
-            "Puede tardar unos minutos. No hace falta hacer nada.",
+            tr("Preparando todo"),
+            tr("Estamos descargando lo que el programa necesita para entender su voz y corregir el texto.\n"
+               "Puede tardar unos minutos. No hace falta hacer nada."),
         )
         self.wizard = wizard
         self.bar = SoftProgress()
@@ -93,7 +94,7 @@ class DownloadPage(_Page):
         self.add(self.bar)
         self.detail = _body("", 13)
         self.add(self.detail)
-        self.retry = QPushButton("Reintentar")
+        self.retry = QPushButton(tr("Reintentar"))
         self.retry.setProperty("primary", True)
         self.retry.clicked.connect(self.start)
         self.retry.hide()
@@ -126,13 +127,13 @@ class DownloadPage(_Page):
         folder = window.settings.models_path()
         packs = self.packs()
         self.retry.hide()
-        self.title.setText("Preparando todo")
+        self.title.setText(tr("Preparando todo"))
         if window.fake_asr or all(pack_present(folder, p) for p in packs):
             self.bar.set_value(1.0)
             self._on_done("")
             return
         self._running = True
-        self.detail.setText("Empezando…")
+        self.detail.setText(tr("Empezando…"))
         worker = self._worker
 
         def run():
@@ -148,20 +149,20 @@ class DownloadPage(_Page):
     def _on_progress(self, done, total, _text: str) -> None:
         self.bar.set_value(done / max(total, 1))
         mb = lambda n: f"{n / 1_000_000:,.0f}".replace(",", ".")  # noqa: E731
-        self.detail.setText(f"{mb(done)} de {mb(total)} MB")
+        self.detail.setText(tr("{done} de {total} MB", done=mb(done), total=mb(total)))
 
     def _on_done(self, error: str) -> None:
         self._running = False
         if error:
-            self.title.setText("No se ha podido descargar")
-            self.detail.setText("Compruebe que el ordenador está conectado a internet y pulse «Reintentar».")
+            self.title.setText(tr("No se ha podido descargar"))
+            self.detail.setText(tr("Compruebe que el ordenador está conectado a internet y pulse «Reintentar»."))
             self.detail.setToolTip(error)
             self.retry.show()
             self.wizard.update_buttons()
             return
         self._ok = True
-        self.title.setText("¡Todo preparado!")
-        self.text.setText("Ya está todo descargado. Ahora vamos a probar el micrófono.")
+        self.title.setText(tr("¡Todo preparado!"))
+        self.text.setText(tr("Ya está todo descargado. Ahora vamos a probar el micrófono."))
         self.detail.setText("")
         self.bar.set_value(1.0)
         self.wizard.models_ready()
@@ -174,15 +175,15 @@ class MicTestPage(_Page):
         super().__init__(
             style.ICON_MIC,
             "ACCENT",
-            "Vamos a probar el micrófono",
-            f"Pulse el botón y diga cualquier cosa en voz alta, por ejemplo:\n«{TEST_PHRASE}»",
+            tr("Vamos a probar el micrófono"),
+            tr("Pulse el botón y diga cualquier cosa en voz alta, por ejemplo:\n«{phrase}»", phrase=tr(TEST_PHRASE)),
         )
         self.wizard = wizard
         self.mic = MicButton(compact=True)
         self.mic.setFixedSize(self.mic.sizeHint())
         self.mic.clicked.connect(self.toggle)
         self.add(self.mic)
-        self.box = QLabel("Aquí aparecerá lo que diga…")
+        self.box = QLabel(tr("Aquí aparecerá lo que diga…"))
         self.box.setObjectName("micBox")
         self.box.setFont(QFont(style.DOCUMENT_FONT, 20))
         self.box.setWordWrap(True)
@@ -194,7 +195,7 @@ class MicTestPage(_Page):
         self.feedback.setProperty("ok", True)
         self.feedback.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.add(self.feedback)
-        self.change = QPushButton("¿No le oye? Elegir otro micrófono")
+        self.change = QPushButton(tr("¿No le oye? Elegir otro micrófono"))
         self.change.setProperty("link", True)
         self.change.setCursor(Qt.CursorShape.PointingHandCursor)
         self.change.clicked.connect(self._show_devices)
@@ -249,7 +250,7 @@ class MicTestPage(_Page):
     def _on_state(self, state: str) -> None:
         self.mic.set_state({"cargando": "loading", "escuchando": "listening", "parado": "idle"}[state])
         if state == "escuchando" and not self._heard:
-            self.box.setText("Le escucho…")
+            self.box.setText(tr("Le escucho…"))
 
     def _on_partial(self, text: str) -> None:
         if text:
@@ -259,7 +260,7 @@ class MicTestPage(_Page):
         # Solo se comprueba que el micrófono llega bien: no hace falta decir la frase de ejemplo.
         self._heard = text
         self._show(text, live=False)
-        self.feedback.setText("✓  ¡Muy bien! El micrófono funciona y le oigo bien.")
+        self.feedback.setText(tr("✓  ¡Muy bien! El micrófono funciona y le oigo bien."))
 
     def _show(self, text: str, live: bool) -> None:
         self.box.setProperty("heard", not live)
@@ -272,7 +273,7 @@ class MicTestPage(_Page):
 
         self.devices.blockSignals(True)
         self.devices.clear()
-        self.devices.addItem("El micrófono de siempre (predeterminado)", "")
+        self.devices.addItem(tr("El micrófono de siempre (predeterminado)"), "")
         try:
             for name in list_input_devices():
                 self.devices.addItem(name, name)
@@ -294,13 +295,14 @@ class MicTestPage(_Page):
 
 class HowToPage(_Page):
     def __init__(self, key: str = "F9"):
-        super().__init__(style.ICON_IDEA, "WARNING", "Así de fácil", "", badge=76)
+        super().__init__(style.ICON_IDEA, "WARNING", tr("Así de fácil"), "", badge=76)
         self.text.hide()
         steps = [
-            (style.ICON_MIC, f"Pulse «Empezar a hablar» (o la tecla {key})\n"
-                             "y hable con normalidad. Verá aparecer lo que dice."),
-            (style.ICON_ENTER, "Para empezar un párrafo nuevo, pulse «Nuevo párrafo»,\nhaga una pausa larga o diga «punto y aparte»."),
-            (style.ICON_SAVE, "Cuando termine, pulse «Parar» y después «Guardar».\nLas faltas se corrigen solas."),
+            (style.ICON_MIC, tr("Pulse «Empezar a hablar» (o la tecla {key})\n"
+                                "y hable con normalidad. Verá aparecer lo que dice.", key=key)),
+            (style.ICON_ENTER, tr("Para empezar un párrafo nuevo, pulse «Nuevo párrafo»,\n"
+                                  "haga una pausa larga o diga «punto y aparte».")),
+            (style.ICON_SAVE, tr("Cuando termine, pulse «Parar» y después «Guardar».\nLas faltas se corrigen solas.")),
         ]
         for i, (icon, text) in enumerate(steps, 1):
             card = QFrame()
@@ -323,7 +325,7 @@ class HowToPage(_Page):
             row.addWidget(label, 1)
             card.setFixedWidth(640)
             self.add(card)
-        tip = _body("Si se equivoca al hablar, no pasa nada: diga la frase bien\ny el programa se queda con lo último.", 14)
+        tip = _body(tr("Si se equivoca al hablar, no pasa nada: diga la frase bien\ny el programa se queda con lo último."), 14)
         tip.setWordWrap(False)  # dos líneas fijas: con ajuste automático Qt calculaba mal el alto
         tip.setMinimumHeight(64)
         self.add(tip)
@@ -334,24 +336,24 @@ class Onboarding(QDialog):
     def __init__(self, window, intro_only: bool = False):
         super().__init__(window)
         self.window = window
-        self.setWindowTitle("Bienvenida a Dictador")
+        self.setWindowTitle(tr("Bienvenida a Dictador"))
         self.setModal(True)
         self.setFixedSize(840, 730)
 
         welcome = _Page(
             style.ICON_MIC,
             "ACCENT",
-            "¡Hola!",
-            "Dictador escribe lo que usted dice en voz alta.\n\n"
-            "Vamos a dejarlo preparado. Solo hay que hacerlo una vez\ny no tardaremos mucho.",
+            tr("¡Hola!"),
+            tr("Dictador escribe lo que usted dice en voz alta.\n\n"
+               "Vamos a dejarlo preparado. Solo hay que hacerlo una vez\ny no tardaremos mucho."),
         )
         welcome.finish()
         done = _Page(
             style.ICON_CHECK,
             "SUCCESS",
-            "¡Todo listo!",
-            "Ya puede escribir con la voz.\n\n"
-            "Si alguna vez quiere volver a ver esta explicación,\npulse «Más» y luego «Ayuda».",
+            tr("¡Todo listo!"),
+            tr("Ya puede escribir con la voz.\n\n"
+               "Si alguna vez quiere volver a ver esta explicación,\npulse «Más» y luego «Ayuda»."),
         )
         done.finish()
         if intro_only:
@@ -364,9 +366,9 @@ class Onboarding(QDialog):
             self.stack.addWidget(page)
 
         self.dots = StepDots(len(self.pages))
-        self.back = QPushButton("Atrás")
+        self.back = QPushButton(tr("Atrás"))
         self.back.clicked.connect(self.previous)
-        self.forward = QPushButton("Siguiente")
+        self.forward = QPushButton(tr("Siguiente"))
         self.forward.setProperty("primary", True)
         self.forward.setDefault(True)
         self.forward.clicked.connect(self.next)
@@ -403,7 +405,8 @@ class Onboarding(QDialog):
     def update_buttons(self) -> None:
         last = self._index == len(self.pages) - 1
         self.back.setVisible(0 < self._index and not last)
-        self.forward.setText("Empezar a escribir" if last else ("Empezar" if self._index == 0 and len(self.pages) > 2 else "Siguiente"))
+        self.forward.setText(tr("Empezar a escribir") if last
+                             else tr("Empezar") if self._index == 0 and len(self.pages) > 2 else tr("Siguiente"))
         self.forward.setEnabled(self.current().can_continue())
 
     def next(self) -> None:
