@@ -52,8 +52,9 @@ class Settings:
     models_dir: str = ""
     input_device: str = ""  # nombre del micrófono; vacío = predeterminado
     autosave_s: int = 60
-    font_size: int = 13
-    theme: str = "sistema"  # sistema | claro | oscuro
+    font_size: int = 18
+    theme: str = "claro"  # sistema | claro | oscuro
+    onboarding_done: bool = False  # el asistente de la primera vez ya se completó
     voice_commands: bool = True
     recent_files: list[str] = field(default_factory=list)
 
@@ -79,7 +80,7 @@ class Settings:
     guard_max_length_change: float = 0.25
     guard_max_removed: float = 0.35  # en prosa: lo que puede quitar al limpiar titubeos
     glossary: list[str] = field(default_factory=list)
-    highlight_changes: bool = True
+    highlight_changes: bool = False  # mostrar marcas y cambios del corrector (vista avanzada)
 
     # Corrector integrado (llama-server propio; rutas vacías = lo descargado en la carpeta de modelos)
     managed_enabled: bool = False

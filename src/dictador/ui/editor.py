@@ -7,7 +7,7 @@ import re
 from contextlib import contextmanager
 from itertools import count
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -18,13 +18,14 @@ from PySide6.QtGui import (
     QTextBlockFormat,
     QTextCharFormat,
     QTextCursor,
+    QTextFormat,
 )
 from PySide6.QtWidgets import QMenu, QTextEdit, QToolTip
 
 from dictador.doc.model import DocumentModel, Paragraph
 
 LINE_SEP = " "  # salto de línea dentro de un bloque (versos)
-MARGIN = 26
+MARGIN = 26  # margen mínimo; el de la hoja lo fija set_page_margins
 PARTIAL_STATE = -2  # bloque que solo contiene el texto en vivo (no pertenece al modelo)
 
 STATUS_TEXT = {
@@ -78,12 +79,19 @@ class DictationEditor(QTextEdit):
         self._dirty = False
         self._partial = ""  # lo que se está diciendo ahora, aún sin cerrar
         self._partial_cursor: QTextCursor | None = None  # selección que cubre ese texto en el documento
+        self.show_marks = True  # marcas de estado en el margen (la vista sencilla las oculta)
+        self._margins = (MARGIN, MARGIN, MARGIN, MARGIN)  # izquierda, arriba, derecha, abajo
+        self._flash_pid = ""
+        self._flash = QVariantAnimation(self, duration=1800, startValue=1.0, endValue=0.0,
+                                        easingCurve=QEasingCurve.Type.InQuad)
+        self._flash.valueChanged.connect(self._paint_flash)
 
         self.setAcceptRichText(False)
         self.setTabChangesFocus(False)
         self.document().setDocumentMargin(MARGIN)
         self.setMouseTracking(True)
-        self.setPlaceholderText("Pulsa «Dictar» (F9) y empieza a hablar, o escribe aquí.")
+        self.setPlaceholderText("Pulse «Empezar a hablar» y diga lo que quiera escribir.\n"
+                                "También puede escribir aquí con el teclado.")
 
         self.document().contentsChange.connect(self._on_contents_change)
         model.reset.connect(self.rebuild)
@@ -97,6 +105,44 @@ class DictationEditor(QTextEdit):
         font = QFont(family, size)
         self.document().setDefaultFont(font)
         self.rebuild()
+
+    def set_page_margins(self, left: int, top: int, right: int, bottom: int) -> None:
+        """Márgenes de la hoja. El de abajo deja sitio al botón flotante para que no tape la última línea."""
+        self._margins = (left, top, right, bottom)
+        self._apply_margins()
+
+    def _apply_margins(self) -> None:
+        root = self.document().rootFrame()
+        fmt = root.frameFormat()
+        left, top, right, bottom = self._margins
+        fmt.setLeftMargin(left)
+        fmt.setTopMargin(top)
+        fmt.setRightMargin(right)
+        fmt.setBottomMargin(bottom)
+        root.setFrameFormat(fmt)
+
+    def flash(self, pid: str) -> None:
+        """Un destello verde suave sobre el párrafo que acaba de corregirse, que se desvanece solo."""
+        if self._block_of(pid) is None:
+            return
+        self._flash_pid = pid
+        self._flash.stop()
+        self._flash.start()
+
+    def _paint_flash(self, value) -> None:
+        block = self._block_of(self._flash_pid)
+        if block is None or float(value) <= 0.01:
+            self.setExtraSelections([])
+            return
+        sel = QTextEdit.ExtraSelection()
+        cursor = QTextCursor(block)
+        cursor.setPosition(block.position() + max(0, block.length() - 1), QTextCursor.MoveMode.KeepAnchor)
+        sel.cursor = cursor
+        color = QColor(223, 246, 221)
+        color.setAlphaF(float(value))
+        sel.format.setBackground(color)
+        sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        self.setExtraSelections([sel])
 
     def _colors(self) -> dict[str, QColor]:
         pal = self.palette()
@@ -222,6 +268,7 @@ class DictationEditor(QTextEdit):
             self._key_of.clear()
             doc = self.document()
             doc.clear()
+            self._apply_margins()
             cursor = QTextCursor(doc)
             for i, p in enumerate(self.model.paragraphs):
                 if i > 0:
@@ -420,6 +467,8 @@ class DictationEditor(QTextEdit):
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
+        if not self.show_marks:
+            return
         colors = self._colors()
         painter = QPainter(self.viewport())
         layout = self.document().documentLayout()
@@ -435,14 +484,15 @@ class DictationEditor(QTextEdit):
                     color = colors[p.status]
                     if p.status == "corrected" and p.show_raw:
                         color = colors["pending"]
-                    painter.fillRect(QRectF(MARGIN - 14, rect.top() + 3, 3, max(4.0, rect.height() - 6)), color)
+                    x = self._margins[0] - 14
+                    painter.fillRect(QRectF(x, rect.top() + 3, 3, max(4.0, rect.height() - 6)), color)
                 elif rect.top() > height:
                     break
             block = block.next()
         painter.end()
 
     def _in_margin(self, pos: QPoint) -> bool:
-        return pos.x() < MARGIN - 4
+        return self.show_marks and pos.x() < self._margins[0] - 4
 
     def mouseMoveEvent(self, event) -> None:
         pos = event.position().toPoint()

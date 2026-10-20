@@ -74,31 +74,42 @@ def main(argv: list[str] | None = None) -> int:
     if args.transcribe:
         return transcribe_file(args.transcribe)
 
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     from dictador.config import APP_NAME, Settings
+    from dictador.ui import style
     from dictador.ui.main_window import MainWindow
+    from dictador.ui.theme import apply_theme
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_NAME)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "ui" / "assets" / "dictador.png")))
+    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+
+    translator = QTranslator(app)  # textos de Qt (botones estándar, atajos) en español
+    if translator.load(QLocale("es_ES"), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+        app.installTranslator(translator)
+    app.setFont(style.ui_font(12))
+    app.setStyleSheet(style.stylesheet())
+    # El diseño es claro, como una hoja de Word, sea cual sea el tema de Windows.
+    apply_theme("claro")
 
     settings = Settings.load()
-    from dictador.ui.theme import apply_theme
-
-    apply_theme(settings.theme)
     window = MainWindow(settings, fake_asr=args.fake_asr, fake_llm=args.fake_llm)
     window.show()
     window.offer_recovery()
     if args.archivo:
         window.open_path(Path(args.archivo))
-    if not args.fake_asr:
-        from dictador.engine import models_present
 
-        if models_present(settings.models_path()):
-            window.engine.preload()
-        else:
-            window.open_models(first_run=True)
+    from dictador.engine import models_present
+
+    if not settings.onboarding_done or not (args.fake_asr or models_present(settings.models_path())):
+        QTimer.singleShot(250, window.run_onboarding)
+    elif not args.fake_asr:
+        window.engine.preload()
     return app.exec()
 
 

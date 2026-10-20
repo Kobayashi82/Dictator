@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 datas = collect_data_files("onnx_asr")  # preprocesadores ONNX de onnx-asr
 datas += copy_metadata("onnx-asr")  # onnx_asr lee su versión con importlib.metadata
 datas += collect_data_files("docx")  # plantilla por defecto de python-docx
+datas += [("src/dictador/ui/assets", "dictador/ui/assets")]  # icono
 
 a = Analysis(
     ["src/dictador/__main__.py"],
@@ -22,6 +23,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="Dictador",
+    icon="src/dictador/ui/assets/dictador.ico",
     console=False,
     upx=False,
 )
