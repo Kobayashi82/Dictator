@@ -1,6 +1,6 @@
 [project]
 name = "dictador"
-version = "0.1.0"
+version = "1.0.0"
 description = "Dictador: dictado por voz a un documento con Parakeet y corrección por LLM local"
 readme = "README.md"
 authors = [

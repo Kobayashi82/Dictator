@@ -5,6 +5,22 @@ Aplicación de escritorio para Windows 10/11 para **dictar por voz a un document
 corrige los párrafos ya cerrados mientras sigues hablando. La idea completa está en [SPEC.md](SPEC.md) y, como
 antecedente, en [dictador.md](dictador.md).
 
+Está pensado para una **persona mayor**: una hoja blanca como la de Word, letra grande, un botón grande para hablar
+y nada más a la vista. Lo avanzado (ajustes, glosario, ver correcciones…) está en el botón **«Más»**.
+
+## Instalación
+
+Se reparte un único **`Instalar Dictador.exe`** (~64 MB): instala para el usuario sin pedir permisos de
+administrador, pone el icono en el escritorio y en el menú Inicio y hace que los documentos `.dictador` se abran con
+doble clic. Al abrir el programa por primera vez, un **asistente** con letra grande:
+
+1. da la bienvenida;
+2. descarga lo necesario (voz y corrector, ~2 GB) con una sola barra de progreso;
+3. prueba el micrófono («Diga: Hoy hace un día precioso»);
+4. explica el uso en tres pasos.
+
+Se puede volver a ver la explicación en «Más › Ver la explicación otra vez» (o `F1`).
+
 ## Cómo funciona
 
 ```
@@ -62,7 +78,7 @@ transcripción sin micrófono.
 
 ## Archivos
 
-- Proyecto `.dictador` (JSON): todos los párrafos con original, corrección y estado. Al reabrirlo, el dictado sigue al
+- Documento `.dictador` (JSON): todos los párrafos con original, corrección y estado. Al reabrirlo, el dictado sigue al
   final.
 - Exportar a `.docx`, `.md` y `.txt`; importar `.txt` y `.md`.
 - Autoguardado de recuperación cada 60 s.
@@ -72,10 +88,13 @@ transcripción sin micrófono.
 
 | Atajo | Acción |
 |---|---|
-| `F9` | Dictar / pausa |
+| `F9` | Empezar / parar de hablar |
 | `Ctrl+Intro` | Nuevo párrafo |
-| `Ctrl+S` / `Ctrl+O` | Guardar / abrir |
-| `Ctrl+E` | Exportar |
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | Nuevo / abrir / guardar |
+| `Ctrl+E` | Guardar como documento de Word |
+| `Ctrl+P` | Imprimir |
+| `Ctrl++` / `Ctrl+-` | Letra más grande / más pequeña |
+| `F1` | Ver la explicación otra vez |
 | `Ctrl+,` | Ajustes |
 
 ## Desarrollo
@@ -88,13 +107,15 @@ uv run dictador --transcribe audio.wav   # diagnóstico: VAD + Parakeet sobre un
 uv run pytest                           # tests
 ```
 
-## Ejecutable
+## Generar el instalador
 
 ```sh
-uv run pyinstaller dictador.spec --noconfirm
+uv run python installer/build.py
 ```
 
-Genera `dist/Dictador/Dictador.exe` (~200 MB, sin modelos: se descargan desde la propia app la primera vez).
+Hace `dist/Dictador/` con PyInstaller (sin modelos) y lo empaqueta con Inno Setup 6
+(`winget install JRSoftware.InnoSetup`) en `dist/Instalar Dictador.exe`. El script del instalador está en
+[installer/dictador.iss](installer/dictador.iss).
 
 ## Licencias de los modelos
 
