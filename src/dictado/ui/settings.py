@@ -161,16 +161,16 @@ class SettingsDialog(QDialog):
         # -- integrado --
         self.managed = QGroupBox("Corrector integrado")
         mform = QFormLayout(self.managed)
-        self.device = QComboBox()
-        self.device.addItem("CPU (en la RAM)", "cpu")
-        self.device.addItem("GPU (Vulkan)", "gpu")
-        self.device.setCurrentIndex(1 if s.managed_device == "gpu" else 0)
+        self.llm_device = QComboBox()
+        self.llm_device.addItem("CPU (en la RAM)", "cpu")
+        self.llm_device.addItem("GPU (Vulkan)", "gpu")
+        self.llm_device.setCurrentIndex(1 if s.managed_device == "gpu" else 0)
         self.gpu_layers = QSpinBox()
         self.gpu_layers.setRange(1, 999)
         self.gpu_layers.setValue(max(1, s.managed_gpu_layers))
         self.gpu_layers.setToolTip("Capas del modelo en la GPU (-ngl). 99 = todas; menos si la GPU tiene poca memoria.")
-        mform.addRow("Dónde se ejecuta:", _row(self.device, QLabel("capas en GPU:"), self.gpu_layers))
-        self.device.currentIndexChanged.connect(lambda _i: self.gpu_layers.setEnabled(self.device.currentData() == "gpu"))
+        mform.addRow("Dónde se ejecuta:", _row(self.llm_device, QLabel("capas en GPU:"), self.gpu_layers))
+        self.llm_device.currentIndexChanged.connect(lambda _i: self.gpu_layers.setEnabled(self.llm_device.currentData() == "gpu"))
         self.gpu_layers.setEnabled(s.managed_device == "gpu")
         self.builtin_status = QLabel()
         self.builtin_status.setWordWrap(True)
@@ -206,12 +206,9 @@ class SettingsDialog(QDialog):
         self.base_url = QLineEdit(s.llm_base_url)
         self.base_url.setPlaceholderText("http://localhost:8080/v1")
         self.base_url.setToolTip(
-            "Cualquier servidor compatible con OpenAI, local o en otro equipo:
-"
-            "llama-swap / llama-server: http://localhost:8080/v1
-"
-            "Ollama: http://localhost:11434/v1
-"
+            "Cualquier servidor compatible con OpenAI, local o en otro equipo:\n"
+            "llama-swap / llama-server: http://localhost:8080/v1\n"
+            "Ollama: http://localhost:11434/v1\n"
             "LM Studio: http://localhost:1234/v1"
         )
         form.addRow("URL base:", self.base_url)
@@ -379,7 +376,7 @@ class SettingsDialog(QDialog):
             guard_max_length_change=round(self.max_length.value(), 2),
             glossary=glossary,
             managed_enabled=bool(self.source.currentData()),
-            managed_device=self.device.currentData(),
+            managed_device=self.llm_device.currentData(),
             managed_server_path=self.server_path.text().strip(),
             managed_model_path=self.gguf_path.text().strip(),
             managed_gpu_layers=self.gpu_layers.value(),
