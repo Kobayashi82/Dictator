@@ -104,3 +104,18 @@ def test_unconfigured_llm_closes_paragraphs(app):
     window.model.close_paragraph(correct=True)
     assert p.status == "closed"
     close(window)
+
+
+def test_managed_server_avoids_busy_port():
+    """Un llama-server de otra sesión ocupando el puerto no debe contestar por el nuestro."""
+    import socket
+
+    from dictador.llm.managed import free_port
+
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        taken = busy.getsockname()[1]
+        other = free_port(taken)
+        assert other != taken and other > 0
+    assert free_port(other) == other
