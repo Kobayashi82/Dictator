@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -21,13 +21,14 @@ from PySide6.QtWidgets import (
 )
 
 from dictado import commands
-from dictado.config import MODE_LABELS, MODES, Settings, recovery_dir
+from dictado.config import MODE_LABELS, MODES, Settings, localdata_dir, recovery_dir
 from dictado.doc import storage
 from dictado.doc.model import DocumentModel
 from dictado.engine import DictationEngine
 from dictado.llm.queue import CorrectionJob, CorrectionQueue
 from dictado.ui.dialogs import DiffDialog, GlossaryDialog
 from dictado.ui.editor import DictationEditor
+from dictado.ui.theme import THEME_LABELS, THEMES, apply_theme
 
 FILE_FILTER = "Proyecto de Dictado (*.dictado)"
 
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self.fake_asr = fake_asr
         self.fake_llm = fake_llm
         self.path: Path | None = None
+        self.server = None  # llama-server propio (modo gestionado)
 
         self.model = DocumentModel(self)
         self.model.mode = settings.mode
@@ -105,6 +107,7 @@ class MainWindow(QMainWindow):
         self.act_highlight = self._action("&Resaltar cambios del corrector", self._toggle_highlight, checkable=True)
         self.act_highlight.setChecked(self.settings.highlight_changes)
         self.act_settings = self._action("&Ajustes…", self.open_settings, "Ctrl+,")
+        self.act_models = self._action("&Modelos…", self.open_models)
         self.act_glossary = self._action("&Glosario del documento…", self.edit_glossary)
         self.act_correct_all = self._action("&Volver a corregir todo el documento", self.recorrect_all)
         self.act_retry = self._action("&Reintentar los párrafos sin corregir", self.retry_failed)
@@ -175,9 +178,18 @@ class MainWindow(QMainWindow):
 
         self.view_menu = menu.addMenu("&Ver")
         self.view_menu.addAction(self.act_highlight)
+        theme_menu = self.view_menu.addMenu("&Tema")
+        self.theme_group = QActionGroup(self)
+        for key in THEMES:
+            act = theme_menu.addAction(THEME_LABELS[key])
+            act.setCheckable(True)
+            act.setData(key)
+            act.setChecked(key == self.settings.theme)
+            self.theme_group.addAction(act)
+        self.theme_group.triggered.connect(lambda act: self.set_theme(act.data()))
 
         self.tools_menu = menu.addMenu("&Herramientas")
-        self.tools_menu.addAction(self.act_settings)
+        self.tools_menu.addActions([self.act_models, self.act_settings])
 
     # -- dictado --------------------------------------------------------------------------------------------------
 
@@ -202,13 +214,27 @@ class MainWindow(QMainWindow):
 
         if models_present(self.settings.models_path()):
             return True
-        QMessageBox.warning(
-            self,
-            "Faltan modelos",
-            f"No se encuentran los modelos de voz en:\n{self.settings.models_path()}\n\n"
-            "Descárgalos desde Herramientas › Modelos de voz.",
-        )
-        return False
+        self.open_models(first_run=True)
+        return models_present(self.settings.models_path())
+
+    def open_models(self, first_run: bool = False) -> None:
+        from dictado.engine import models_present
+        from dictado.ui.models_dialog import ModelsDialog
+
+        from dictado.models.download import LLM_PACKS, pack_present
+
+        s = self.settings
+        had_voice = models_present(s.models_path())
+        had_llm = all(pack_present(s.models_path(), p) for p in LLM_PACKS)
+        dialog = ModelsDialog(s.models_path(), self, first_run=first_run, include_llm=s.managed_enabled)
+        dialog.exec()
+        if not had_voice and models_present(s.models_path()) and not self.fake_asr:
+            self.engine.preload()
+        if not had_llm and all(pack_present(s.models_path(), p) for p in LLM_PACKS):
+            if not s.managed_enabled and not s.llm_model:
+                s.managed_enabled = True  # recién descargado y sin otro corrector: se usa el integrado
+            if s.managed_enabled:
+                self.configure_llm()
 
     def new_paragraph(self) -> None:
         if self.engine.running:
@@ -448,6 +474,12 @@ class MainWindow(QMainWindow):
 
     # -- varios ---------------------------------------------------------------------------------------------------
 
+    def set_theme(self, theme: str) -> None:
+        self.settings.theme = theme
+        apply_theme(theme)
+        for act in self.theme_group.actions():
+            act.setChecked(act.data() == theme)
+
     def _toggle_highlight(self, checked: bool) -> None:
         self.settings.highlight_changes = checked
         self.editor.highlight_changes = checked
@@ -460,8 +492,12 @@ class MainWindow(QMainWindow):
         if self.fake_llm:
             from dictado.llm.client import FakeLLMClient
 
+            self._stop_server()
             self.corrector.set_client(FakeLLMClient())
+        elif s.managed_enabled:
+            self._configure_managed()
         elif s.llm_base_url and s.llm_model:
+            self._stop_server()
             from dictado.llm.client import LLMClient
 
             self.corrector.set_client(
@@ -470,7 +506,48 @@ class MainWindow(QMainWindow):
                 )
             )
         else:
+            self._stop_server()
             self.corrector.set_client(None)
+
+    def _configure_managed(self) -> None:
+        from dictado.llm.client import LLMClient
+        from dictado.llm.managed import ManagedServer
+
+        from dictado.models.download import builtin_model, builtin_server
+
+        s = self.settings
+        exe = s.managed_server_path or str(builtin_server(s.models_path()))
+        gguf = s.managed_model_path or str(builtin_model(s.models_path()))
+        if not Path(exe).is_file() or not Path(gguf).is_file():
+            self._stop_server()
+            self.corrector.set_client(None)
+            self._on_llm_status("error", "Faltan los archivos del corrector integrado: descárgalos en Herramientas › Modelos.")
+            return
+        layers = s.managed_gpu_layers if s.managed_device == "gpu" else 0
+        config = (exe, gguf, s.managed_port, layers, s.managed_ctx)
+        if self.server is None or not self.server.same_config(*config):
+            self._stop_server()
+            self.server = ManagedServer(*config, log_path=localdata_dir() / "llama-server.log")
+            try:
+                self.server.start()
+            except OSError as e:
+                self.server = None
+                self.corrector.set_client(None)
+                self._on_llm_status("error", str(e))
+                self.statusBar().showMessage(f"Modo gestionado: {e}", 8000)
+                return
+        server = self.server
+        client = LLMClient(
+            server.base_url, server.model_name, "", s.llm_timeout_s, s.llm_temperature, s.llm_disable_thinking
+        )
+        client.wait_until_ready = lambda: (server.ready.wait(), server.error)[1]
+        client.is_ready = server.ready.is_set
+        self.corrector.set_client(client)
+
+    def _stop_server(self) -> None:
+        if self.server is not None:
+            self.server.stop()
+            self.server = None
 
     def _glossary(self) -> list[str]:
         seen, terms = set(), []
@@ -524,6 +601,8 @@ class MainWindow(QMainWindow):
             color, tip = "#3a7ae0", ""
         elif state == "error":
             text, color, tip = "LLM: error", "#d0782a", detail
+        elif state == "arrancando":
+            text, color, tip = "LLM: arrancando servidor…", "#3a7ae0", "Cargando el modelo en llama-server"
         else:
             text, color, tip = "LLM: sin configurar", "#888888", "Configura el corrector en Herramientas › Ajustes."
         if self.fake_llm and state == "ok":
@@ -581,6 +660,7 @@ class MainWindow(QMainWindow):
         except OSError as e:
             QMessageBox.warning(self, "Ajustes", f"No se pudieron guardar los ajustes: {e}")
         self.editor.set_text_font("Georgia", self.settings.font_size)
+        self.set_theme(self.settings.theme)
         self._autosave.start(max(10, self.settings.autosave_s) * 1000)
         self.configure_llm()
         if restart:
@@ -592,6 +672,7 @@ class MainWindow(QMainWindow):
             return
         self.engine.shutdown()
         self.corrector.shutdown()
+        self._stop_server()
         self.clear_recovery()
         try:
             self.settings.save()

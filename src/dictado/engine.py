@@ -207,8 +207,6 @@ class DictationEngine(QObject):
 
 
 def models_present(models_dir: Path) -> bool:
-    from dictado.asr.parakeet import MODEL_DIR
+    from dictado.models.download import VOICE_PACKS, pack_present
 
-    return (models_dir / "silero-vad" / "silero_vad.onnx").is_file() and any(
-        (models_dir / MODEL_DIR).glob("encoder-model*.onnx")
-    )
+    return all(pack_present(models_dir, pack) for pack in VOICE_PACKS)

@@ -289,6 +289,12 @@ class DictationEditor(QTextEdit):
             self._sync = False
         self.viewport().update()
 
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == event.Type.PaletteChange:
+            # Cambio de tema: los colores de los párrafos salen de la paleta.
+            self.refresh_formats()
+
     def _at_bottom(self) -> bool:
         bar = self.verticalScrollBar()
         return bar.value() >= bar.maximum() - 4

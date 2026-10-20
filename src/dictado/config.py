@@ -40,6 +40,7 @@ class Settings:
     input_device: str = ""  # nombre del micrófono; vacío = predeterminado
     autosave_s: int = 60
     font_size: int = 13
+    theme: str = "sistema"  # sistema | claro | oscuro
     voice_commands: bool = True
     recent_files: list[str] = field(default_factory=list)
 
@@ -62,11 +63,12 @@ class Settings:
     glossary: list[str] = field(default_factory=list)
     highlight_changes: bool = True
 
-    # Modo gestionado (llama-server propio)
+    # Corrector integrado (llama-server propio; rutas vacías = lo descargado en la carpeta de modelos)
     managed_enabled: bool = False
+    managed_device: str = "cpu"  # cpu | gpu
     managed_server_path: str = ""
     managed_model_path: str = ""
-    managed_gpu_layers: int = 0
+    managed_gpu_layers: int = 99
     managed_port: int = 8089
     managed_ctx: int = 4096
 

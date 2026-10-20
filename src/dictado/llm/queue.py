@@ -56,6 +56,8 @@ class CorrectionQueue(QObject):
         def run():
             if client is None:
                 return
+            if not self._wait_ready(client):
+                return
             try:
                 models = client.list_models()
             except LLMError as e:
@@ -67,6 +69,19 @@ class CorrectionQueue(QObject):
                 self.status.emit("ok", client.model)
 
         threading.Thread(target=run, daemon=True, name="llm-check").start()
+
+    def _wait_ready(self, client) -> bool:
+        """Con el servidor gestionado, espera a que cargue el modelo. False si no llegó a arrancar."""
+        waiter = getattr(client, "wait_until_ready", None)
+        if waiter is None:
+            return True
+        if not getattr(client, "is_ready", lambda: True)():
+            self.status.emit("arrancando", "")
+        error = waiter()
+        if error:
+            self.status.emit("error", error)
+            return False
+        return True
 
     def enqueue(self, job: CorrectionJob) -> None:
         with self._lock:
@@ -93,6 +108,11 @@ class CorrectionQueue(QObject):
                 with self._lock:
                     self._queued.discard(job.pid)
                 self.finished.emit(job.pid, job.raw, None, "El corrector no está configurado.")
+                continue
+            if not self._wait_ready(client):
+                with self._lock:
+                    self._queued.discard(job.pid)
+                self.finished.emit(job.pid, job.raw, None, "El servidor del corrector no arrancó.")
                 continue
             self.started.emit(job.pid)
             self.status.emit("corrigiendo", str(self.pending()))
