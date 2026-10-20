@@ -65,6 +65,7 @@ def test_dictation_end_to_end(monkeypatch, tmp_path):
     assert texts[0].startswith("Era una mañana tranquila")
     assert "primeras luces" in texts[0]
     assert texts[1].startswith("Nadie esperaba la carta")
+    assert "aparte" not in texts[1].lower()  # el comando de voz no llega al texto
 
     path = tmp_path / "e2e.dictado"
     assert window._save_to(path)

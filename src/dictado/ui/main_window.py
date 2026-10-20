@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+from dictado import commands
 from dictado.config import MODE_LABELS, MODES, Settings, recovery_dir
 from dictado.doc import storage
 from dictado.doc.model import DocumentModel
@@ -99,6 +100,8 @@ class MainWindow(QMainWindow):
         self.act_save = self._action("&Guardar", self.file_save, QKeySequence.StandardKey.Save)
         self.act_save_as = self._action("Guardar &como…", self.file_save_as, "Ctrl+Shift+S")
         self.act_quit = self._action("&Salir", self.close, "Ctrl+Q")
+        self.act_export = self._action("&Exportar…", self.file_export, "Ctrl+E")
+        self.act_import = self._action("&Importar texto…", self.file_import)
         self.act_highlight = self._action("&Resaltar cambios del corrector", self._toggle_highlight, checkable=True)
         self.act_highlight.setChecked(self.settings.highlight_changes)
         self.act_settings = self._action("&Ajustes…", self.open_settings, "Ctrl+,")
@@ -158,6 +161,8 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu.addActions([self.act_save, self.act_save_as])
         self.file_menu.addSeparator()
+        self.file_menu.addActions([self.act_import, self.act_export])
+        self.file_menu.addSeparator()
         self.file_menu.addAction(self.act_quit)
 
         self.dictate_menu = menu.addMenu("&Dictado")
@@ -212,7 +217,19 @@ class MainWindow(QMainWindow):
             self.model.close_paragraph(correct=True)
 
     def on_sentence(self, text: str) -> None:
-        self.model.append_sentence(text, self.model.mode)
+        actions = commands.parse(text) if self.settings.voice_commands else [commands.Text(text)]
+        for action in actions:
+            if isinstance(action, commands.Text):
+                self.model.append_sentence(action.text, self.model.mode)
+            elif isinstance(action, commands.NewParagraph):
+                self.model.close_paragraph(correct=True)
+                self.statusBar().showMessage("Comando: nuevo párrafo", 2500)
+            elif isinstance(action, commands.DeleteLastSentence):
+                done = self.model.delete_last_sentence()
+                self.statusBar().showMessage("Comando: frase borrada" if done else "No hay frase que borrar", 2500)
+            elif isinstance(action, commands.Title):
+                self.model.add_title(action.text)
+                self.statusBar().showMessage("Comando: título", 2500)
 
     def on_paragraph_break(self) -> None:
         self.model.close_paragraph(correct=True)
@@ -329,6 +346,50 @@ class MainWindow(QMainWindow):
         self.clear_recovery()
         self.statusBar().showMessage(f"Guardado en {path}", 4000)
         return True
+
+    def file_export(self) -> None:
+        self.editor.reconcile()
+        base = self.path.with_suffix("") if self.path else Path("documento")
+        name, chosen = QFileDialog.getSaveFileName(
+            self,
+            "Exportar",
+            str(base) + ".docx",
+            "Documento de Word (*.docx);;Markdown (*.md);;Texto (*.txt)",
+        )
+        if not name:
+            return
+        path = Path(name)
+        if path.suffix.lower() not in (".docx", ".md", ".txt"):
+            path = path.with_suffix({"Markdown": ".md", "Texto": ".txt"}.get(chosen.split(" (")[0], ".docx"))
+        pending = sum(p.status in ("pending", "correcting") for p in self.model.paragraphs)
+        try:
+            storage.export(path, self.model.paragraphs)
+        except (OSError, storage.StorageError) as e:
+            QMessageBox.critical(self, "Exportar", f"No se pudo exportar:\n{e}")
+            return
+        note = f" ({pending} párrafo(s) aún sin corregir)" if pending else ""
+        self.statusBar().showMessage(f"Exportado a {path}{note}", 6000)
+
+    def file_import(self) -> None:
+        if not self.maybe_save():
+            return
+        name, _ = QFileDialog.getOpenFileName(self, "Importar texto", "", "Texto o Markdown (*.txt *.md)")
+        if not name:
+            return
+        try:
+            paragraphs = storage.import_text(name, mode=self.model.mode)
+        except OSError as e:
+            QMessageBox.critical(self, "Importar", f"No se pudo leer el archivo:\n{e}")
+            return
+        self.path = None
+        self.model.load(paragraphs, mode=self.model.mode, glossary=[])
+        self.model.set_modified(True)
+        self._update_title()
+        self.statusBar().showMessage(
+            f"Importados {len(paragraphs)} párrafos. El dictado continúa al final; "
+            "los párrafos importados no se corrigen salvo que lo pidas.",
+            8000,
+        )
 
     def _fill_recent(self) -> None:
         self.recent_menu.clear()

@@ -1,0 +1,12 @@
+# Ejemplo orientativo de configuración de llama-swap para el corrector de Dictado.
+# En Dictado: Herramientas › Ajustes › Corrector (LLM)
+#   URL base: http://localhost:8080/v1   (o la IP del equipo donde corre llama-swap)
+#   Modelo:   corrector-cpu  o  corrector-gpu  (se puede cambiar en caliente)
+#
+# Usa un build de llama.cpp con Vulkan para GPUs antiguas; -ngl controla cuántas capas van a la GPU.
+
+models:
+  "corrector-cpu":
+    cmd: llama-server --port ${PORT} -m qwen3.5-2b-q4_k_m.gguf -ngl 0 -c 4096
+  "corrector-gpu":
+    cmd: llama-server --port ${PORT} -m qwen3.5-2b-q4_k_m.gguf -ngl 99 -c 4096
