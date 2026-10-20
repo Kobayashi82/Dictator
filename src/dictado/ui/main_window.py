@@ -24,6 +24,8 @@ from dictado.config import MODE_LABELS, MODES, Settings, recovery_dir
 from dictado.doc import storage
 from dictado.doc.model import DocumentModel
 from dictado.engine import DictationEngine
+from dictado.llm.queue import CorrectionJob, CorrectionQueue
+from dictado.ui.dialogs import DiffDialog, GlossaryDialog
 from dictado.ui.editor import DictationEditor
 
 FILE_FILTER = "Proyecto de Dictado (*.dictado)"
@@ -52,6 +54,15 @@ class MainWindow(QMainWindow):
         self.engine.error.connect(self._on_engine_error)
         self.engine.asr_busy.connect(self._on_asr_busy)
 
+        self.corrector = CorrectionQueue(self)
+        self.corrector.started.connect(self._on_correction_started)
+        self.corrector.finished.connect(self._on_correction_finished)
+        self.corrector.status.connect(self._on_llm_status)
+        self.model.paragraph_closed.connect(self._on_paragraph_closed)
+        self.editor.show_diff.connect(self.show_diff)
+        self.editor.revert.connect(self.model.revert)
+        self.editor.recorrect.connect(self.model.request_recorrect)
+
         self._build_actions()
         self._build_toolbar()
         self._build_menus()
@@ -65,6 +76,7 @@ class MainWindow(QMainWindow):
         self._autosave.start(max(10, settings.autosave_s) * 1000)
 
         self.resize(QSize(980, 760))
+        self.configure_llm()
 
     # -- construcción ---------------------------------------------------------------------------------------------
 
@@ -78,7 +90,7 @@ class MainWindow(QMainWindow):
         return act
 
     def _build_actions(self) -> None:
-        self.act_dictate = self._action("Dictar", self.toggle_dictation, "F9", checkable=True)
+        self.act_dictate = self._action("● Dictar", self.toggle_dictation, "F9", checkable=True)
         self.act_dictate.setToolTip("Empezar o pausar el dictado (F9)")
         self.act_paragraph = self._action("Nuevo párrafo", self.new_paragraph, "Ctrl+Return")
         self.act_paragraph.setToolTip("Cerrar el párrafo actual (Ctrl+Intro)")
@@ -89,6 +101,10 @@ class MainWindow(QMainWindow):
         self.act_quit = self._action("&Salir", self.close, "Ctrl+Q")
         self.act_highlight = self._action("&Resaltar cambios del corrector", self._toggle_highlight, checkable=True)
         self.act_highlight.setChecked(self.settings.highlight_changes)
+        self.act_settings = self._action("&Ajustes…", self.open_settings, "Ctrl+,")
+        self.act_glossary = self._action("&Glosario del documento…", self.edit_glossary)
+        self.act_correct_all = self._action("&Volver a corregir todo el documento", self.recorrect_all)
+        self.act_retry = self._action("&Reintentar los párrafos sin corregir", self.retry_failed)
 
     def _build_toolbar(self) -> None:
         bar = QToolBar("Dictado", self)
@@ -127,7 +143,11 @@ class MainWindow(QMainWindow):
 
         for button in bar.findChildren(QToolButton):
             if button.defaultAction() is self.act_dictate:
-                button.setMinimumWidth(80)
+                button.setMinimumWidth(90)
+                button.setStyleSheet(
+                    "QToolButton { font-weight: bold; padding: 3px 10px; }"
+                    "QToolButton:checked { background: #c62f2f; color: white; border-radius: 4px; }"
+                )
 
     def _build_menus(self) -> None:
         menu = self.menuBar()
@@ -143,8 +163,16 @@ class MainWindow(QMainWindow):
         self.dictate_menu = menu.addMenu("&Dictado")
         self.dictate_menu.addActions([self.act_dictate, self.act_paragraph])
 
+        self.doc_menu = menu.addMenu("D&ocumento")
+        self.doc_menu.addActions([self.act_glossary])
+        self.doc_menu.addSeparator()
+        self.doc_menu.addActions([self.act_retry, self.act_correct_all])
+
         self.view_menu = menu.addMenu("&Ver")
         self.view_menu.addAction(self.act_highlight)
+
+        self.tools_menu = menu.addMenu("&Herramientas")
+        self.tools_menu.addAction(self.act_settings)
 
     # -- dictado --------------------------------------------------------------------------------------------------
 
@@ -152,14 +180,14 @@ class MainWindow(QMainWindow):
         if self.engine.running:
             self.engine.stop()
             self.act_dictate.setChecked(False)
-            self.act_dictate.setText("Dictar")
+            self.act_dictate.setText("● Dictar")
         else:
             if not self.ensure_models():
                 self.act_dictate.setChecked(False)
                 return
             self.engine.start()
             self.act_dictate.setChecked(True)
-            self.act_dictate.setText("Pausa")
+            self.act_dictate.setText("❚❚ Pausa")
 
     def ensure_models(self) -> bool:
         """Hook para el asistente de primer arranque (fase 4). Sin modelos no se puede dictar."""
@@ -205,7 +233,7 @@ class MainWindow(QMainWindow):
         self.state_label.setText({"cargando": "Cargando…", "escuchando": "Escuchando", "parado": "Parado"}[state])
         if state == "parado" and self.act_dictate.isChecked():
             self.act_dictate.setChecked(False)
-            self.act_dictate.setText("Dictar")
+            self.act_dictate.setText("● Dictar")
 
     def _on_engine_error(self, message: str) -> None:
         self.statusBar().showMessage(message, 10_000)
@@ -267,7 +295,10 @@ class MainWindow(QMainWindow):
         return True
 
     def after_open(self) -> None:
-        """Hook: al reabrir, lo que estaba pendiente vuelve a la cola (fase 2)."""
+        """Al reabrir, lo que estaba pendiente vuelve a la cola."""
+        for p in self.model.paragraphs:
+            if p.status == "pending":
+                self._on_paragraph_closed(p.id)
 
     def file_save(self) -> bool:
         if self.path is None:
@@ -361,11 +392,145 @@ class MainWindow(QMainWindow):
         self.editor.highlight_changes = checked
         self.editor.refresh_formats()
 
+    # -- corrección ------------------------------------------------------------------------------------------------
+
+    def configure_llm(self) -> None:
+        s = self.settings
+        if self.fake_llm:
+            from dictado.llm.client import FakeLLMClient
+
+            self.corrector.set_client(FakeLLMClient())
+        elif s.llm_base_url and s.llm_model:
+            from dictado.llm.client import LLMClient
+
+            self.corrector.set_client(
+                LLMClient(
+                    s.llm_base_url, s.llm_model, s.llm_api_key, s.llm_timeout_s, s.llm_temperature, s.llm_disable_thinking
+                )
+            )
+        else:
+            self.corrector.set_client(None)
+
+    def _glossary(self) -> list[str]:
+        seen, terms = set(), []
+        for t in self.settings.glossary + self.model.glossary:
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                terms.append(t)
+        return terms
+
+    def _on_paragraph_closed(self, pid: str) -> None:
+        p = self.model.get(pid)
+        if p is None or p.status != "pending":
+            return
+        if p.mode == "ninguno" or not self.corrector.configured:
+            self.model.set_status(pid, "closed")
+            return
+        s = self.settings
+        self.corrector.enqueue(
+            CorrectionJob(
+                pid=pid,
+                raw=p.raw,
+                mode=p.mode,
+                context=self.model.context_before(pid, s.context_paragraphs),
+                glossary=self._glossary(),
+                max_distance=s.guard_max_distance,
+                max_length_change=s.guard_max_length_change,
+            )
+        )
+
+    def _on_correction_started(self, pid: str) -> None:
+        p = self.model.get(pid)
+        if p is not None and p.status == "pending" and not p.user_edited:
+            self.model.set_status(pid, "correcting")
+
+    def _on_correction_finished(self, pid: str, raw: str, corrected, reason: str) -> None:
+        p = self.model.get(pid)
+        if p is None:
+            return
+        if p.status == "correcting":
+            self.model.apply_correction(pid, raw, corrected, reason)
+        elif p.status == "pending" and p.raw == raw and not self.corrector.configured:
+            self.model.set_status(pid, "closed", reason)
+        if corrected is None and reason:
+            self.statusBar().showMessage(reason, 6000)
+
+    def _on_llm_status(self, state: str, detail: str) -> None:
+        if state == "ok":
+            text, color, tip = "LLM: conectado", "#3a9a4a", self.settings.llm_model
+        elif state == "corrigiendo":
+            text = f"LLM: corrigiendo ({detail})" if detail not in ("", "0", "1") else "LLM: corrigiendo"
+            color, tip = "#3a7ae0", ""
+        elif state == "error":
+            text, color, tip = "LLM: error", "#d0782a", detail
+        else:
+            text, color, tip = "LLM: sin configurar", "#888888", "Configura el corrector en Herramientas › Ajustes."
+        if self.fake_llm and state == "ok":
+            text += " (simulado)"
+        self.llm_label.setText(f'<span style="color:{color}">●</span> {text}')
+        self.llm_label.setToolTip(tip)
+
+    def show_diff(self, pid: str) -> None:
+        p = self.model.get(pid)
+        if p is not None and p.corrected is not None:
+            DiffDialog(p.raw, p.corrected, self).exec()
+
+    def retry_failed(self) -> None:
+        for p in list(self.model.paragraphs):
+            if p.status in ("rejected", "closed") and not p.user_edited and p.style != "title" and p.mode != "ninguno":
+                self.model.request_recorrect(p.id)
+
+    def recorrect_all(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Volver a corregir",
+            "Se volverán a corregir todos los párrafos dictados que no hayas editado a mano, "
+            "partiendo del texto original de Parakeet. ¿Seguir?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        for p in list(self.model.paragraphs):
+            if not p.user_edited and p.style != "title" and p.mode != "ninguno":
+                self.model.request_recorrect(p.id)
+
+    def edit_glossary(self) -> None:
+        dialog = GlossaryDialog(self.model.glossary, self)
+        if dialog.exec():
+            self.model.glossary = dialog.terms()
+            self.model.set_modified(True)
+
+    def open_settings(self) -> None:
+        from dictado.ui.settings import SettingsDialog
+
+        dialog = SettingsDialog(self.settings, self, fake_llm=self.fake_llm)
+        if not dialog.exec():
+            return
+        new = dialog.result_settings()
+        restart = self.engine.running and (
+            new.input_device != self.settings.input_device
+            or new.short_pause_ms != self.settings.short_pause_ms
+            or new.long_pause_ms != self.settings.long_pause_ms
+            or new.vad_threshold != self.settings.vad_threshold
+            or new.models_dir != self.settings.models_dir
+        )
+        for name, value in vars(new).items():
+            setattr(self.settings, name, value)
+        try:
+            self.settings.save()
+        except OSError as e:
+            QMessageBox.warning(self, "Ajustes", f"No se pudieron guardar los ajustes: {e}")
+        self.editor.set_text_font("Georgia", self.settings.font_size)
+        self._autosave.start(max(10, self.settings.autosave_s) * 1000)
+        self.configure_llm()
+        if restart:
+            self.statusBar().showMessage("Los cambios del micrófono y las pausas se aplican al volver a dictar.", 6000)
+
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self.maybe_save():
             event.ignore()
             return
         self.engine.shutdown()
+        self.corrector.shutdown()
         self.clear_recovery()
         try:
             self.settings.save()
