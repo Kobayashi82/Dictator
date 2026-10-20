@@ -14,8 +14,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMenu,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -30,7 +28,7 @@ from dictador.ui import style
 from dictador.ui.dialogs import DiffDialog, GlossaryDialog
 from dictador.ui.editor import DictationEditor
 from dictador.ui.theme import apply_theme
-from dictador.ui.widgets import IconButton, MicButton, SegmentedControl, Toast, ask, tell
+from dictador.ui.widgets import IconButton, MenuPanel, MicButton, PillButton, SegmentedControl, Toast, ask, tell
 
 FILE_FILTER = "Documento de Dictador (*.dictador *.dictado)"
 FONT_SIZES = (14, 16, 18, 20, 22, 24, 28, 32)
@@ -74,15 +72,15 @@ class _Canvas(QWidget):
         self.editor = editor
         editor.setParent(self)
         editor.setFrameShape(DictationEditor.Shape.NoFrame)
-        editor.setStyleSheet("QTextEdit { background: white; border: none; }")
+        editor.setObjectName("page")
         editor.set_page_margins(72, 56, 72, 190)
         editor.setPlaceholderText("")  # la línea de estado de abajo ya explica qué hacer
         self.fade = _BottomFade(self)
 
         self.status = QLabel(self)
+        self.status.setObjectName("status")
         self.status.setFont(style.ui_font(14))
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status.setStyleSheet(f"color: {style.TEXT_SOFT.name()}; background: transparent;")
         self.status.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._status_fx = QGraphicsOpacityEffect(self.status)
         self.status.setGraphicsEffect(self._status_fx)
@@ -91,20 +89,8 @@ class _Canvas(QWidget):
         self._status_anim.finished.connect(self._status_swap)
 
         self.mic = MicButton(self)
-        self.paragraph = QPushButton("  Nuevo párrafo", self)
-        self.paragraph.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.paragraph.setFont(style.ui_font(12))
-        self.paragraph.setStyleSheet(
-            f"QPushButton {{ background: white; border: 1px solid {style.BORDER.name()}; border-radius: 20px;"
-            f" padding: 8px 18px; font-size: 12pt; }} QPushButton:hover {{ background: #F5F5F5; }}"
-        )
-        self.paragraph.setToolTip("Termina el párrafo y empieza otro (también puede decir «punto y aparte»)")
-        self._para_fx = QGraphicsOpacityEffect(self.paragraph)
-        self._para_fx.setOpacity(0.0)
-        self.paragraph.setGraphicsEffect(self._para_fx)
-        self._para_anim = QPropertyAnimation(self._para_fx, b"opacity", self, duration=220)
-        self._para_anim.finished.connect(self._para_finished)
-        self.paragraph.hide()
+        self.paragraph = PillButton(style.ICON_ENTER, "Nuevo párrafo", self)
+        self.paragraph.setToolTip("Termina el párrafo y empieza otro (también puede decir «punto y aparte»)  (Ctrl+Intro)")
         self.toast = Toast(self)
 
     def page_rect(self) -> QRect:
@@ -121,7 +107,7 @@ class _Canvas(QWidget):
         self.mic.setGeometry(mx, my, mic.width(), mic.height())
         self.status.setGeometry(page.left(), my - 34, page.width(), 30)
         ph = self.paragraph.sizeHint()
-        self.paragraph.setGeometry(mx + mic.width() + 4, my + (mic.height() - ph.height()) // 2, ph.width(), ph.height())
+        self.paragraph.setGeometry(mx + mic.width() - 6, my + (mic.height() - ph.height()) // 2, ph.width(), ph.height())
         self.toast.reposition()
         super().resizeEvent(event)
 
@@ -141,7 +127,7 @@ class _Canvas(QWidget):
         p.drawRoundedRect(page, 6, 6)
         p.end()
 
-    # -- textos y botón de párrafo con transición -------------------------------------------------------------------
+    # -- texto de estado con transición -----------------------------------------------------------------------------
 
     def set_status(self, text: str) -> None:
         if text == self._next_status:
@@ -159,25 +145,13 @@ class _Canvas(QWidget):
             self._status_anim.setEndValue(1.0)
             self._status_anim.start()
 
-    def show_paragraph_button(self, visible: bool) -> None:
-        self._para_anim.stop()
-        if visible:
-            self.paragraph.show()
-        self._para_anim.setStartValue(self._para_fx.opacity())
-        self._para_anim.setEndValue(1.0 if visible else 0.0)
-        self._para_anim.start()
-
-    def _para_finished(self) -> None:
-        if self._para_anim.endValue() == 0.0:
-            self.paragraph.hide()
-
 
 class _Header(QWidget):
-    """Barra de arriba, blanca, con los botones de archivo, el modo y el tamaño de letra."""
+    """Barra de arriba con los botones de archivo, el modo y el tamaño de letra."""
 
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor("white"))
+        p.fillRect(self.rect(), style.SURFACE)
         p.fillRect(0, self.height() - 1, self.width(), 1, style.BORDER)
         p.end()
 
@@ -198,6 +172,7 @@ class MainWindow(QMainWindow):
         self.editor = DictationEditor(self.model, self)
         self.editor.highlight_changes = settings.highlight_changes
         self.editor.show_marks = settings.highlight_changes
+        self.editor.italic = settings.document_italic
         self.editor.set_text_font(style.DOCUMENT_FONT, settings.font_size)
 
         self.engine = DictationEngine(settings, fake_asr=fake_asr, parent=self)
@@ -270,10 +245,7 @@ class MainWindow(QMainWindow):
         self.act_import = self._action("Importar un texto…", self.file_import)
         self.act_bigger = self._action("Letra más grande", lambda: self.change_font(+1), "Ctrl++")
         self.act_smaller = self._action("Letra más pequeña", lambda: self.change_font(-1), "Ctrl+-")
-        self.act_highlight = self._action("Mostrar las correcciones", self._toggle_highlight, checkable=True)
-        self.act_highlight.setChecked(self.settings.highlight_changes)
         self.act_settings = self._action("Ajustes…", self.open_settings, "Ctrl+,")
-        self.act_models = self._action("Modelos de voz y corrector…", self.open_models)
         self.act_glossary = self._action("Nombres y palabras especiales…", self.edit_glossary)
         self.act_correct_all = self._action("Volver a corregir todo el documento", self.recorrect_all)
         self.act_retry = self._action("Reintentar los párrafos sin corregir", self.retry_failed)
@@ -310,28 +282,35 @@ class MainWindow(QMainWindow):
         row.addWidget(self.more_button)
         return header
 
-    def more_menu(self) -> QMenu:
-        menu = QMenu(self)
-        menu.addAction(self.act_paragraph)
-        recent = menu.addMenu("Abrir un documento reciente")
-        self._fill_recent(recent)
-        menu.addActions([self.act_save_as, self.act_import, self.act_export])
-        menu.addSeparator()
-        menu.addActions([self.act_glossary, self.act_retry, self.act_correct_all, self.act_highlight])
-        menu.addSeparator()
-        menu.addActions([self.act_help, self.act_models, self.act_settings])
-        menu.addSeparator()
-        info = menu.addAction(self._llm_text())
-        info.setEnabled(False)
-        menu.addAction(self.act_quit)
-        return menu
+    def more_menu(self) -> MenuPanel:
+        """El panel de «Más»: pocas opciones, grandes y agrupadas."""
+        panel = MenuPanel(self)
+        recent = [f for f in self.settings.recent_files if Path(f).exists() and (not self.path or Path(f) != self.path)]
+        if recent:
+            panel.add_section("Abrir de nuevo")
+            for f in recent[:4]:
+                panel.add_row(style.ICON_RECENT, Path(f).stem, lambda f=f: self.maybe_save() and self.open_path(Path(f)))
+        panel.add_section("Documento")
+        panel.add_row(style.ICON_SAVE_AS, "Guardar con otro nombre…", self.act_save_as.trigger)
+        panel.add_row(style.ICON_EXPORT, "Exportar como texto…", self.act_export.trigger)
+        panel.add_row(style.ICON_IMPORT, "Importar un texto…", self.act_import.trigger)
+        panel.add_section("Corrección")
+        panel.add_row(style.ICON_BOOK, "Nombres y palabras especiales…", self.act_glossary.trigger)
+        panel.add_row(style.ICON_HIGHLIGHT, "Marcar lo que se ha corregido", self._toggle_highlight,
+                      toggle=self.settings.highlight_changes)
+        if any(self._can_retry(p) for p in self.model.paragraphs):
+            panel.add_row(style.ICON_WARNING, "Reintentar los párrafos sin corregir", self.act_retry.trigger)
+        panel.add_row(style.ICON_REFRESH, "Volver a corregir todo", self.act_correct_all.trigger)
+        panel.add_tiles([
+            (style.ICON_HELP, "Ayuda", self.act_help.trigger),
+            (style.ICON_SETTINGS, "Ajustes", self.act_settings.trigger),
+            (style.ICON_QUIT, "Salir", self.act_quit.trigger),
+        ])
+        panel.add_note(self._llm_text())
+        return panel
 
     def _show_more_menu(self) -> None:
-        menu = self.more_menu()
-        b = self.more_button
-        pos = b.mapToGlobal(b.rect().bottomRight())
-        pos.setX(pos.x() - menu.sizeHint().width())
-        menu.exec(pos)
+        self.more_menu().popup_under(self.more_button)
 
     # -- avisos ---------------------------------------------------------------------------------------------------
 
@@ -379,24 +358,6 @@ class MainWindow(QMainWindow):
         from dictador.ui.onboarding import Onboarding
 
         Onboarding(self, intro_only=intro_only).exec()
-
-    def open_models(self, first_run: bool = False) -> None:
-        from dictador.engine import models_present
-        from dictador.models.download import LLM_PACKS, pack_present
-        from dictador.ui.models_dialog import ModelsDialog
-
-        s = self.settings
-        had_voice = models_present(s.models_path())
-        had_llm = all(pack_present(s.models_path(), p) for p in LLM_PACKS)
-        dialog = ModelsDialog(s.models_path(), self, first_run=first_run, include_llm=s.managed_enabled)
-        dialog.exec()
-        if not had_voice and models_present(s.models_path()) and not self.fake_asr:
-            self.engine.preload()
-        if not had_llm and all(pack_present(s.models_path(), p) for p in LLM_PACKS):
-            if not s.managed_enabled and not s.llm_model:
-                s.managed_enabled = True  # recién descargado y sin otro corrector: se usa el integrado
-            if s.managed_enabled:
-                self.configure_llm()
 
     def new_paragraph(self) -> None:
         if self.engine.running:
@@ -459,7 +420,6 @@ class MainWindow(QMainWindow):
         self.editor.setUndoRedoEnabled(state == "parado")
         if state == "parado":
             self.editor.set_partial("")
-        self.canvas.show_paragraph_button(state == "escuchando")
         self._refresh_status()
 
     def _on_engine_error(self, message: str) -> None:
@@ -643,13 +603,6 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.notify(f"Importados {len(paragraphs)} párrafos")
 
-    def _fill_recent(self, menu: QMenu) -> None:
-        files = [f for f in self.settings.recent_files if Path(f).exists()]
-        if not files:
-            menu.addAction("(ninguno todavía)").setEnabled(False)
-        for f in files:
-            menu.addAction(Path(f).stem, lambda f=f: self.maybe_save() and self.open_path(Path(f)))
-
     def change_font(self, step: int) -> None:
         current = self.settings.font_size
         sizes = sorted(set(FONT_SIZES) | {current})
@@ -712,10 +665,6 @@ class MainWindow(QMainWindow):
 
     # -- varios ---------------------------------------------------------------------------------------------------
 
-    def set_theme(self, theme: str) -> None:
-        self.settings.theme = theme
-        apply_theme(theme)
-
     def _toggle_highlight(self, checked: bool) -> None:
         self.settings.highlight_changes = checked
         self.editor.highlight_changes = checked
@@ -757,7 +706,7 @@ class MainWindow(QMainWindow):
         if not Path(exe).is_file() or not Path(gguf).is_file():
             self._stop_server()
             self.corrector.set_client(None)
-            self._on_llm_status("error", "Faltan los archivos del corrector integrado (Más › Modelos).")
+            self._on_llm_status("error", "Falta descargar el corrector (Más › Ajustes › Corrector).")
             return
         layers = s.managed_gpu_layers if s.managed_device == "gpu" else 0
         config = (exe, gguf, s.managed_port, layers, s.managed_ctx)
@@ -843,9 +792,13 @@ class MainWindow(QMainWindow):
         if p is not None and p.corrected is not None:
             DiffDialog(p.raw, p.corrected, self).exec()
 
+    @staticmethod
+    def _can_retry(p) -> bool:
+        return p.status in ("rejected", "closed") and not p.user_edited and p.style != "title" and p.mode != "ninguno"
+
     def retry_failed(self) -> None:
         for p in list(self.model.paragraphs):
-            if p.status in ("rejected", "closed") and not p.user_edited and p.style != "title" and p.mode != "ninguno":
+            if self._can_retry(p):
                 self.model.request_recorrect(p.id)
 
     def recorrect_all(self) -> None:
@@ -884,8 +837,9 @@ class MainWindow(QMainWindow):
         for name, value in vars(new).items():
             setattr(self.settings, name, value)
         self.save_settings()
+        self.editor.italic = self.settings.document_italic
         self.editor.set_text_font(style.DOCUMENT_FONT, self.settings.font_size)
-        self.set_theme(self.settings.theme)
+        apply_theme(self.settings.theme)
         self._autosave.start(max(10, self.settings.autosave_s) * 1000)
         self.engine.set_mode(self.model.mode)  # las pausas se aplican en caliente
         self.configure_llm()

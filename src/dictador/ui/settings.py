@@ -1,324 +1,323 @@
-"""Diálogo de ajustes."""
+"""Ajustes: pocas opciones, grandes y explicadas; lo técnico queda plegado en «Opciones avanzadas»."""
 
 from __future__ import annotations
 
-import threading
 from dataclasses import replace
+from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QGroupBox,
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from dictador.config import MODE_LABELS, MODES, Settings, default_models_dir
+from dictador.config import Settings, default_models_dir
+from dictador.ui import style
+from dictador.ui.theme import THEME_LABELS, THEMES
+from dictador.ui.widgets import Badge, Combo, SegmentedControl, Switch
+
+FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 36)
+PARAGRAPH_PAUSES = [("1800", "Corta", "Unos 2 segundos de silencio"), ("2500", "Normal", "Unos 2,5 segundos"),
+                    ("4000", "Larga", "Unos 4 segundos")]
 
 
-class _Probe(QObject):
-    done = Signal(object, str)  # lista de modelos | None, mensaje
+def _closest(value: int, options: list[tuple[str, str, str]]) -> str:
+    return min(options, key=lambda o: abs(int(o[0]) - value))[0]
 
 
-def _row(*widgets) -> QWidget:
-    w = QWidget()
-    layout = QHBoxLayout(w)
-    layout.setContentsMargins(0, 0, 0, 0)
-    for x in widgets:
-        layout.addWidget(x)
-    return w
+class _Stepper(QWidget):
+    """«−  18  +»: más fácil de usar que una casilla con flechitas."""
+
+    def __init__(self, value: int, values: tuple[int, ...]):
+        super().__init__()
+        self._values = sorted(set(values) | {value})
+        self._value = value
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        self.minus = QPushButton("−")
+        self.plus = QPushButton("+")
+        self.label = QLabel()
+        self.label.setFont(style.ui_font(16, QFont.Weight.DemiBold))
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setMinimumWidth(52)
+        for b, step in ((self.minus, -1), (self.plus, +1)):
+            b.setProperty("stepper", True)
+            b.setFixedWidth(56)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _c=False, step=step: self._step(step))
+        row.addWidget(self.minus)
+        row.addWidget(self.label)
+        row.addWidget(self.plus)
+        self._show()
+
+    def value(self) -> int:
+        return self._value
+
+    def setValue(self, value: int) -> None:  # noqa: N802 (como los de Qt)
+        if value not in self._values:
+            self._values = sorted(set(self._values) | {value})
+        self._value = value
+        self._show()
+
+    def _step(self, step: int) -> None:
+        i = max(0, min(len(self._values) - 1, self._values.index(self._value) + step))
+        self.setValue(self._values[i])
+
+    def _show(self) -> None:
+        self.label.setText(str(self._value))
+        self.minus.setEnabled(self._value != self._values[0])
+        self.plus.setEnabled(self._value != self._values[-1])
 
 
 class SettingsDialog(QDialog):
     def __init__(self, settings: Settings, parent=None, fake_llm: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Ajustes")
-        self.setMinimumWidth(560)
+        self.resize(780, 820)
         self._original = settings
         self.fake_llm = fake_llm
         s = settings
 
-        tabs = QTabWidget(self)
-        tabs.addTab(self._general_tab(s), "General")
-        tabs.addTab(self._dictation_tab(s), "Dictado")
-        tabs.addTab(self._llm_tab(s), "Corrector (LLM)")
-        tabs.addTab(self._glossary_tab(s), "Glosario")
+        content = QWidget()
+        self.body = QVBoxLayout(content)
+        self.body.setContentsMargins(36, 28, 36, 20)
+        self.body.setSpacing(18)
+        title = QLabel("Ajustes")
+        title.setFont(style.display_font(24))
+        self.body.addWidget(title)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
+        self._appearance(s)
+        self._dictation(s)
+        self._corrector(s)
+        self._advanced(s)
+        self._update_builtin_status()  # depende de la carpeta de modelos, que está en las avanzadas
+        self.body.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+
+        cancel = QPushButton("Cancelar")
+        cancel.clicked.connect(self.reject)
+        save = QPushButton("Guardar los cambios")
+        save.setProperty("primary", True)
+        save.setDefault(True)
+        save.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(36, 12, 36, 22)
+        buttons.addStretch(1)
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(tabs)
-        layout.addWidget(buttons)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(scroll, 1)
+        layout.addLayout(buttons)
 
-        self._probe = _Probe(self)
-        self._probe.done.connect(self._on_probe)
+    # -- piezas ---------------------------------------------------------------------------------------------------
 
-    # -- pestañas -------------------------------------------------------------------------------------------------
+    def _card(self, icon: str, title: str, color: str = "ACCENT") -> QVBoxLayout:
+        card = QFrame()
+        card.setObjectName("card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        head = QHBoxLayout()
+        head.setSpacing(14)
+        head.addWidget(Badge(icon, color, 44))
+        label = QLabel(title)
+        label.setFont(style.display_font(17))
+        head.addWidget(label, 1)
+        layout.addLayout(head)
+        self.body.addWidget(card)
+        return layout
 
-    def _general_tab(self, s: Settings) -> QWidget:
-        w = QWidget()
-        form = QFormLayout(w)
-        self.mode = QComboBox()
-        for m in MODES:
-            self.mode.addItem(MODE_LABELS[m], m)
-        self.mode.setCurrentIndex(MODES.index(s.mode))
-        form.addRow("Modo por defecto:", self.mode)
+    @staticmethod
+    def _option(layout: QVBoxLayout, text: str, help_text: str, control: QWidget, below: bool = False) -> None:
+        """Una opción: el nombre (y una explicación corta) a la izquierda y el control a la derecha o debajo."""
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        label = QLabel(text)
+        label.setFont(style.ui_font(14))
+        label.setWordWrap(True)
+        texts.addWidget(label)
+        if help_text:
+            hint = QLabel(help_text)
+            hint.setFont(style.ui_font(11.5))
+            hint.setProperty("soft", True)
+            hint.setWordWrap(True)
+            texts.addWidget(hint)
+        if below:
+            layout.addLayout(texts)
+            layout.addWidget(control)
+            return
+        row = QHBoxLayout()
+        row.setSpacing(18)
+        row.addLayout(texts, 1)
+        row.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(row)
 
-        from dictador.ui.theme import THEME_LABELS, THEMES
+    # -- secciones ------------------------------------------------------------------------------------------------
 
-        self.theme = QComboBox()
-        for key in THEMES:
-            self.theme.addItem(THEME_LABELS[key], key)
-        self.theme.setCurrentIndex(max(0, self.theme.findData(s.theme)))
-        form.addRow("Tema:", self.theme)
+    def _appearance(self, s: Settings) -> None:
+        card = self._card(style.ICON_THEME, "Aspecto")
+        self.theme = SegmentedControl([(k, THEME_LABELS[k], "") for k in THEMES])
+        self.theme.set_current(s.theme if s.theme in THEMES else "claro", animate=False)
+        self._option(card, "Colores", "Claro como el papel, u oscuro para descansar la vista.", self.theme)
+        self.font_size = _Stepper(s.font_size, FONT_SIZES)
+        self._option(card, "Tamaño de la letra", "También con los botones «Letra −» y «Letra +».", self.font_size)
+        self.italic = Switch(s.document_italic)
+        self._option(card, "Texto en cursiva", "Como el que aparece mientras habla.", self.italic)
 
-        self.font_size = QSpinBox()
-        self.font_size.setRange(8, 36)
-        self.font_size.setValue(s.font_size)
-        form.addRow("Tamaño de letra:", self.font_size)
-
-        self.autosave = QSpinBox()
-        self.autosave.setRange(10, 3600)
-        self.autosave.setSuffix(" s")
-        self.autosave.setValue(s.autosave_s)
-        form.addRow("Autoguardado cada:", self.autosave)
-
-        self.models_dir = QLineEdit(s.models_dir)
-        self.models_dir.setPlaceholderText(str(default_models_dir()))
-        browse = QPushButton("Examinar…")
-        browse.clicked.connect(self._browse_models)
-        form.addRow("Carpeta de modelos:", _row(self.models_dir, browse))
-        return w
-
-    def _dictation_tab(self, s: Settings) -> QWidget:
-        w = QWidget()
-        form = QFormLayout(w)
-        self.device = QComboBox()
-        self.device.addItem("Predeterminado del sistema", "")
+    def _dictation(self, s: Settings) -> None:
+        card = self._card(style.ICON_MIC, "Micrófono y dictado")
+        self.device = Combo()
+        self.device.addItem("El micrófono de siempre (predeterminado)", "")
         try:
             from dictador.audio.capture import list_input_devices
 
             for name in list_input_devices():
                 self.device.addItem(name, name)
-        except Exception as e:  # noqa: BLE001
-            self.device.addItem(f"(no se pudieron listar: {e})", "")
-        i = self.device.findData(s.input_device)
-        self.device.setCurrentIndex(max(0, i))
-        form.addRow("Micrófono:", self.device)
+        except Exception:  # noqa: BLE001
+            pass
+        self.device.setCurrentIndex(max(0, self.device.findData(s.input_device)))
+        self._option(card, "Micrófono", "", self.device, below=True)
+        self._pause_start = _closest(s.long_pause_ms, PARAGRAPH_PAUSES)
+        self.paragraph_pause = SegmentedControl(PARAGRAPH_PAUSES)
+        self.paragraph_pause.set_current(self._pause_start, animate=False)
+        self._option(card, "Silencio para empezar un párrafo",
+                     "Si a veces se le corta el párrafo mientras piensa, elija «Larga».", self.paragraph_pause)
+        self.live_text = Switch(s.live_text)
+        self._option(card, "Ver lo que digo mientras hablo", "Aparece en gris y se completa al hacer una pausa.",
+                     self.live_text)
+        self.voice_commands = Switch(s.voice_commands)
+        self._option(card, "Entender órdenes de voz",
+                     "«punto y aparte», «borra la última frase», «título: …»", self.voice_commands)
 
-        self.short_pause = QSpinBox()
-        self.short_pause.setRange(300, 3000)
-        self.short_pause.setSingleStep(100)
-        self.short_pause.setSuffix(" ms")
-        self.short_pause.setValue(s.short_pause_ms)
-        form.addRow("Pausa que cierra la frase:", self.short_pause)
-
-        self.long_pause = QSpinBox()
-        self.long_pause.setRange(1000, 10000)
-        self.long_pause.setSingleStep(250)
-        self.long_pause.setSuffix(" ms")
-        self.long_pause.setValue(s.long_pause_ms)
-        form.addRow("Pausa que cierra el párrafo:", self.long_pause)
-
-        self.verse_pause = QSpinBox()
-        self.verse_pause.setRange(150, 2000)
-        self.verse_pause.setSingleStep(50)
-        self.verse_pause.setSuffix(" ms")
-        self.verse_pause.setValue(s.poetry_verse_pause_ms)
-        form.addRow("Poesía · pausa que cierra el verso:", self.verse_pause)
-
-        self.stanza_pause = QSpinBox()
-        self.stanza_pause.setRange(500, 10000)
-        self.stanza_pause.setSingleStep(100)
-        self.stanza_pause.setSuffix(" ms")
-        self.stanza_pause.setValue(s.poetry_stanza_pause_ms)
-        form.addRow("Poesía · pausa que cierra la estrofa:", self.stanza_pause)
-
-        self.live_text = QCheckBox("Mostrar el texto mientras hablo (antes de que se cierre la frase)")
-        self.live_text.setChecked(s.live_text)
-        form.addRow(self.live_text)
-
-        self.vad_threshold = QDoubleSpinBox()
-        self.vad_threshold.setRange(0.1, 0.95)
-        self.vad_threshold.setSingleStep(0.05)
-        self.vad_threshold.setValue(s.vad_threshold)
-        self.vad_threshold.setToolTip("Más alto: necesita voz más clara para empezar una frase (menos ruido).")
-        form.addRow("Sensibilidad de la VAD:", self.vad_threshold)
-
-        self.voice_commands = QCheckBox("Reconocer comandos de voz («punto y aparte», «borra la última frase»…)")
-        self.voice_commands.setChecked(s.voice_commands)
-        form.addRow(self.voice_commands)
-
-        self.save_audio = QCheckBox("Guardar el audio de cada sesión para diagnóstico (en %LOCALAPPDATA%\\Dictador\\diagnostico)")
-        self.save_audio.setChecked(s.save_session_audio)
-        form.addRow(self.save_audio)
-        return w
-
-    def _llm_tab(self, s: Settings) -> QWidget:
-        w = QWidget()
-        outer = QVBoxLayout(w)
-
-        top = QFormLayout()
-        self.source = QComboBox()
-        self.source.addItem("Integrado: Qwen3.5 2B en este equipo", True)
-        self.source.addItem("Servidor externo (Ollama, llama-swap, LM Studio, remoto…)", False)
-        self.source.setCurrentIndex(0 if s.managed_enabled else 1)
-        top.addRow("Corrector:", self.source)
-        outer.addLayout(top)
-
-        # -- integrado --
-        self.managed = QGroupBox("Corrector integrado")
-        mform = QFormLayout(self.managed)
-        self.llm_device = QComboBox()
-        self.llm_device.addItem("CPU (en la RAM)", "cpu")
-        self.llm_device.addItem("GPU (Vulkan)", "gpu")
-        self.llm_device.setCurrentIndex(1 if s.managed_device == "gpu" else 0)
-        self.gpu_layers = QSpinBox()
-        self.gpu_layers.setRange(1, 999)
-        self.gpu_layers.setValue(max(1, s.managed_gpu_layers))
-        self.gpu_layers.setToolTip("Capas del modelo en la GPU (-ngl). 99 = todas; menos si la GPU tiene poca memoria.")
-        mform.addRow("Dónde se ejecuta:", _row(self.llm_device, QLabel("capas en GPU:"), self.gpu_layers))
-        self.llm_device.currentIndexChanged.connect(lambda _i: self.gpu_layers.setEnabled(self.llm_device.currentData() == "gpu"))
-        self.gpu_layers.setEnabled(s.managed_device == "gpu")
+    def _corrector(self, s: Settings) -> None:
+        card = self._card(style.ICON_CHECK, "Corrector", "SUCCESS")
         self.builtin_status = QLabel()
+        self.builtin_status.setFont(style.ui_font(13))
         self.builtin_status.setWordWrap(True)
-        self.download_llm = QPushButton("Descargar…")
+        self.download_llm = QPushButton("Descargar")
+        self.download_llm.setProperty("small", True)
         self.download_llm.clicked.connect(self._download_llm)
-        mform.addRow("Archivos:", _row(self.builtin_status, self.download_llm))
+        row = QHBoxLayout()
+        row.addWidget(self.builtin_status, 1)
+        row.addWidget(self.download_llm)
+        card.addLayout(row)
+        options = [("cpu", "Procesador", ""), ("gpu", "Tarjeta gráfica", "")]
+        self._external = bool(s.llm_model) and not s.managed_enabled
+        if self._external:
+            options.append(("externo", "Servidor externo", "El que está configurado en config.json"))
+        self.where = SegmentedControl(options)
+        self._where_start = "externo" if self._external else s.managed_device
+        self.where.set_current(self._where_start, animate=False)
+        self._option(card, "Dónde trabaja",
+                     "La tarjeta gráfica es más rápida, pero no funciona bien en todos los equipos.", self.where)
 
-        self.server_path = QLineEdit(s.managed_server_path)
-        self.server_path.setPlaceholderText("(el descargado)")
-        browse_server = QPushButton("Examinar…")
-        browse_server.clicked.connect(
-            lambda: self._browse_file(self.server_path, "llama-server", "Ejecutable (*.exe);;Todos (*)")
-        )
-        mform.addRow("Otro llama-server:", _row(self.server_path, browse_server))
-        self.gguf_path = QLineEdit(s.managed_model_path)
-        self.gguf_path.setPlaceholderText("(Qwen3.5 2B descargado)")
-        browse_gguf = QPushButton("Examinar…")
-        browse_gguf.clicked.connect(lambda: self._browse_file(self.gguf_path, "Modelo GGUF", "GGUF (*.gguf)"))
-        mform.addRow("Otro modelo .gguf:", _row(self.gguf_path, browse_gguf))
-        self.port = QSpinBox()
-        self.port.setRange(1024, 65535)
-        self.port.setValue(s.managed_port)
-        self.ctx = QSpinBox()
-        self.ctx.setRange(1024, 131072)
-        self.ctx.setSingleStep(1024)
-        self.ctx.setValue(s.managed_ctx)
-        mform.addRow("Puerto:", _row(self.port, QLabel("contexto (-c):"), self.ctx))
-        outer.addWidget(self.managed)
+    def _advanced(self, s: Settings) -> None:
+        self.more = QPushButton("Mostrar las opciones avanzadas")
+        self.more.setProperty("link", True)
+        self.more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.more.clicked.connect(self._toggle_advanced)
+        self.body.addWidget(self.more, 0, Qt.AlignmentFlag.AlignLeft)
 
-        # -- externo --
-        self.external = QGroupBox("Servidor externo (compatible con OpenAI)")
-        form = QFormLayout(self.external)
-        self.base_url = QLineEdit(s.llm_base_url)
-        self.base_url.setPlaceholderText("http://localhost:8080/v1")
-        self.base_url.setToolTip(
-            "Cualquier servidor compatible con OpenAI, local o en otro equipo:\n"
-            "llama-swap / llama-server: http://localhost:8080/v1\n"
-            "Ollama: http://localhost:11434/v1\n"
-            "LM Studio: http://localhost:1234/v1"
-        )
-        form.addRow("URL base:", self.base_url)
-        self.model = QComboBox()
-        self.model.setEditable(True)
-        self.model.setMinimumWidth(260)
-        if s.llm_model:
-            self.model.addItem(s.llm_model)
-        self.model.setCurrentText(s.llm_model)
-        self.test_button = QPushButton("Probar conexión")
-        self.test_button.clicked.connect(self._test_connection)
-        form.addRow("Modelo:", _row(self.model, self.test_button))
-        self.test_result = QLabel("")
-        self.test_result.setWordWrap(True)
-        form.addRow("", self.test_result)
-        self.api_key = QLineEdit(s.llm_api_key)
-        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key.setPlaceholderText("opcional")
-        form.addRow("Clave API:", self.api_key)
-        outer.addWidget(self.external)
+        self.advanced = QFrame()
+        self.advanced.setObjectName("card")
+        form = QFormLayout(self.advanced)
+        form.setContentsMargins(24, 20, 24, 20)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        # -- comunes --
-        common = QGroupBox("Corrección")
-        form = QFormLayout(common)
-        self.timeout = QDoubleSpinBox()
-        self.timeout.setRange(5, 600)
-        self.timeout.setSuffix(" s")
-        self.timeout.setValue(s.llm_timeout_s)
-        form.addRow("Tiempo máximo por párrafo:", self.timeout)
-        self.temperature = QDoubleSpinBox()
-        self.temperature.setRange(0, 1)
-        self.temperature.setSingleStep(0.05)
-        self.temperature.setValue(s.llm_temperature)
-        form.addRow("Temperatura:", self.temperature)
-        self.no_think = QCheckBox("Desactivar el razonamiento (thinking)")
-        self.no_think.setChecked(s.llm_disable_thinking)
-        form.addRow(self.no_think)
-        self.context = QSpinBox()
-        self.context.setRange(0, 5)
-        self.context.setValue(s.context_paragraphs)
-        form.addRow("Párrafos anteriores como contexto:", self.context)
-        self.max_distance = QDoubleSpinBox()
-        self.max_distance.setRange(0.02, 1)
-        self.max_distance.setSingleStep(0.05)
-        self.max_distance.setValue(s.guard_max_distance)
-        self.max_distance.setToolTip("Distancia de edición máxima (normalizada) entre el original y la corrección.")
-        form.addRow("Cambio máximo permitido:", self.max_distance)
-        self.max_length = QDoubleSpinBox()
-        self.max_length.setRange(0.05, 1)
-        self.max_length.setSingleStep(0.05)
-        self.max_length.setValue(s.guard_max_length_change)
-        form.addRow("Variación máxima de longitud:", self.max_length)
-        self.max_removed = QDoubleSpinBox()
-        self.max_removed.setRange(0.05, 1)
-        self.max_removed.setSingleStep(0.05)
-        self.max_removed.setValue(s.guard_max_removed)
-        self.max_removed.setToolTip(
-            "En prosa, parte del texto que el corrector puede quitar al limpiar repeticiones, "
-            "autocorrecciones y muletillas."
-        )
-        form.addRow("Texto máximo que puede quitar:", self.max_removed)
-        outer.addWidget(common)
-        outer.addStretch()
+        def label(text: str) -> QLabel:
+            lab = QLabel(text)
+            lab.setFont(style.ui_font(12.5))
+            return lab
 
-        self.source.currentIndexChanged.connect(self._update_source)
-        self._update_source()
-        self._update_builtin_status()
-        return w
+        def spin(low, high, step, value, suffix="", double=False):
+            box = QDoubleSpinBox() if double else QSpinBox()
+            box.setRange(low, high)
+            box.setSingleStep(step)
+            box.setValue(value)
+            box.setSuffix(suffix)
+            box.setMinimumWidth(150)
+            return box
 
-    def _update_source(self) -> None:
-        builtin = bool(self.source.currentData())
-        self.managed.setEnabled(builtin)
-        self.external.setEnabled(not builtin)
+        self.autosave = spin(10, 3600, 10, s.autosave_s, " s")
+        form.addRow(label("Copia de seguridad cada"), self.autosave)
+        self.vad_threshold = spin(0.1, 0.95, 0.05, s.vad_threshold, double=True)
+        self.vad_threshold.setToolTip("Más alto: hace falta una voz más clara para empezar a escribir (menos ruido).")
+        form.addRow(label("Exigencia del micrófono (0,1–0,95)"), self.vad_threshold)
+        self.short_pause = spin(300, 3000, 100, s.short_pause_ms, " ms")
+        form.addRow(label("Pausa que cierra la frase"), self.short_pause)
+        self.verse_pause = spin(150, 2000, 50, s.poetry_verse_pause_ms, " ms")
+        form.addRow(label("Poesía: pausa que cierra el verso"), self.verse_pause)
+        self.stanza_pause = spin(500, 10000, 100, s.poetry_stanza_pause_ms, " ms")
+        form.addRow(label("Poesía: pausa que cierra la estrofa"), self.stanza_pause)
+        self.gpu_layers = spin(1, 999, 1, max(1, s.managed_gpu_layers))
+        self.gpu_layers.setToolTip("Capas del modelo en la tarjeta gráfica (-ngl). 99 = todas.")
+        form.addRow(label("Capas en la tarjeta gráfica"), self.gpu_layers)
+        self.models_dir = QLineEdit(s.models_dir)
+        self.models_dir.setPlaceholderText(str(default_models_dir()))
+        self.models_dir.editingFinished.connect(self._update_builtin_status)
+        browse = QPushButton("Examinar…")
+        browse.setProperty("small", True)
+        browse.clicked.connect(self._browse_models)
+        folder = QHBoxLayout()
+        folder.addWidget(self.models_dir, 1)
+        folder.addWidget(browse)
+        form.addRow(label("Carpeta de los modelos"), folder)
+        self.save_audio = Switch(s.save_session_audio)
+        self.save_audio.setToolTip("En %LOCALAPPDATA%\\Dictador\\diagnostico")
+        form.addRow(label("Guardar el audio para diagnóstico"), self.save_audio)
+        self.glossary = QPlainTextEdit("\n".join(s.glossary))
+        self.glossary.setPlaceholderText("Un nombre por línea")
+        self.glossary.setFixedHeight(120)
+        form.addRow(label("Nombres para todos\nlos documentos"), self.glossary)
+        self.advanced.hide()
+        self.body.addWidget(self.advanced)
 
-    def _models_dir(self):
-        from pathlib import Path
+    # -- acciones -------------------------------------------------------------------------------------------------
 
-        return Path(self.models_dir.text().strip()) if self.models_dir.text().strip() else default_models_dir()
+    def _toggle_advanced(self) -> None:
+        show = self.advanced.isHidden()
+        self.advanced.setVisible(show)
+        self.more.setText("Ocultar las opciones avanzadas" if show else "Mostrar las opciones avanzadas")
+
+    def _models_dir(self) -> Path:
+        text = self.models_dir.text().strip()
+        return Path(text) if text else default_models_dir()
 
     def _update_builtin_status(self) -> None:
         from dictador.models.download import LLM_PACKS, pack_present
 
         missing = [p for p in LLM_PACKS if not pack_present(self._models_dir(), p)]
         if missing:
-            size = sum(p.size for p in missing) / 1_000_000
-            self.builtin_status.setText(f"Faltan por descargar ({size:,.0f} MB).".replace(",", "."))
+            size = f"{sum(p.size for p in missing) / 1_000_000:,.0f}".replace(",", ".")
+            self.builtin_status.setText(f"Corrige las faltas y la puntuación. Falta descargarlo ({size} MB).")
         else:
-            self.builtin_status.setText("✓ Qwen3.5 2B y llama-server instalados.")
+            self.builtin_status.setText("✓  Instalado. Corrige las faltas y la puntuación en este equipo.")
+        self.builtin_status.setProperty("ok", not missing)
+        self.builtin_status.style().unpolish(self.builtin_status)
+        self.builtin_status.style().polish(self.builtin_status)
         self.download_llm.setVisible(bool(missing))
 
     def _download_llm(self) -> None:
@@ -327,95 +326,36 @@ class SettingsDialog(QDialog):
         ModelsDialog(self._models_dir(), self, include_llm=True).exec()
         self._update_builtin_status()
 
-    def _browse_file(self, edit: QLineEdit, title: str, filters: str) -> None:
-        name, _ = QFileDialog.getOpenFileName(self, title, edit.text(), filters)
-        if name:
-            edit.setText(name)
-
-    def _glossary_tab(self, s: Settings) -> QWidget:
-        w = QWidget()
-        layout = QVBoxLayout(w)
-        layout.addWidget(
-            QLabel(
-                "Nombres propios y términos que el corrector debe escribir exactamente así, uno por línea.\n"
-                "Este glosario vale para todos los documentos; cada documento tiene además el suyo "
-                "(Documento › Glosario del documento)."
-            )
-        )
-        self.glossary = QPlainTextEdit("\n".join(s.glossary))
-        layout.addWidget(self.glossary)
-        return w
-
-    # -- acciones -------------------------------------------------------------------------------------------------
-
     def _browse_models(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Carpeta de modelos", self.models_dir.text() or str(default_models_dir()))
+        d = QFileDialog.getExistingDirectory(self, "Carpeta de los modelos", str(self._models_dir()))
         if d:
             self.models_dir.setText(d)
-
-    def _test_connection(self) -> None:
-        self.test_button.setEnabled(False)
-        self.test_result.setText("Conectando…")
-        url, key = self.base_url.text().strip(), self.api_key.text().strip()
-        probe = self._probe
-        fake = self.fake_llm
-
-        def run():
-            from dictador.llm.client import FakeLLMClient, LLMClient, LLMError
-
-            try:
-                client = FakeLLMClient() if fake else LLMClient(url, "", key, timeout=10)
-                models = client.list_models()
-            except (LLMError, Exception) as e:  # noqa: BLE001
-                probe.done.emit(None, str(e))
-                return
-            probe.done.emit(models, f"Conectado: {len(models)} modelo(s) disponibles.")
-
-        threading.Thread(target=run, daemon=True).start()
-
-    def _on_probe(self, models, message: str) -> None:
-        self.test_button.setEnabled(True)
-        self.test_result.setText(message if models is not None else f"✗ {message}")
-        if models:
-            current = self.model.currentText()
-            self.model.clear()
-            self.model.addItems(models)
-            self.model.setCurrentText(current if current in models or current else models[0])
+            self._update_builtin_status()
 
     def result_settings(self) -> Settings:
+        s = self._original
         glossary = [line.strip() for line in self.glossary.toPlainText().splitlines() if line.strip()]
+        pause = self.paragraph_pause.current()
+        long_pause = s.long_pause_ms if pause == self._pause_start else int(pause)
+        where = self.where.current()
         return replace(
-            self._original,
-            mode=self.mode.currentData(),
+            s,
+            theme=self.theme.current(),
             font_size=self.font_size.value(),
-            theme=self.theme.currentData(),
-            autosave_s=self.autosave.value(),
-            models_dir=self.models_dir.text().strip(),
+            document_italic=self.italic.isChecked(),
             input_device=self.device.currentData() or "",
+            long_pause_ms=max(long_pause, self.short_pause.value() + 200),
+            live_text=self.live_text.isChecked(),
+            voice_commands=self.voice_commands.isChecked(),
+            managed_enabled=s.managed_enabled if where == self._where_start else where != "externo",
+            managed_device=where if where != "externo" else s.managed_device,
+            autosave_s=self.autosave.value(),
+            vad_threshold=round(self.vad_threshold.value(), 2),
             short_pause_ms=self.short_pause.value(),
-            long_pause_ms=max(self.long_pause.value(), self.short_pause.value() + 200),
             poetry_verse_pause_ms=self.verse_pause.value(),
             poetry_stanza_pause_ms=max(self.stanza_pause.value(), self.verse_pause.value() + 200),
-            live_text=self.live_text.isChecked(),
-            save_session_audio=self.save_audio.isChecked(),
-            vad_threshold=round(self.vad_threshold.value(), 2),
-            voice_commands=self.voice_commands.isChecked(),
-            llm_base_url=self.base_url.text().strip(),
-            llm_model=self.model.currentText().strip(),
-            llm_api_key=self.api_key.text().strip(),
-            llm_timeout_s=self.timeout.value(),
-            llm_temperature=round(self.temperature.value(), 2),
-            llm_disable_thinking=self.no_think.isChecked(),
-            context_paragraphs=self.context.value(),
-            guard_max_distance=round(self.max_distance.value(), 2),
-            guard_max_length_change=round(self.max_length.value(), 2),
-            guard_max_removed=round(self.max_removed.value(), 2),
-            glossary=glossary,
-            managed_enabled=bool(self.source.currentData()),
-            managed_device=self.llm_device.currentData(),
-            managed_server_path=self.server_path.text().strip(),
-            managed_model_path=self.gguf_path.text().strip(),
             managed_gpu_layers=self.gpu_layers.value(),
-            managed_port=self.port.value(),
-            managed_ctx=self.ctx.value(),
+            models_dir=self.models_dir.text().strip(),
+            save_session_audio=self.save_audio.isChecked(),
+            glossary=glossary,
         )

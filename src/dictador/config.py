@@ -53,7 +53,8 @@ class Settings:
     input_device: str = ""  # nombre del micrófono; vacío = predeterminado
     autosave_s: int = 60
     font_size: int = 18
-    theme: str = "claro"  # sistema | claro | oscuro
+    theme: str = "claro"  # claro | oscuro | sistema
+    document_italic: bool = True  # el texto en cursiva, como lo que aparece mientras se habla
     onboarding_done: bool = False  # el asistente de la primera vez ya se completó
     voice_commands: bool = True
     recent_files: list[str] = field(default_factory=list)

@@ -7,11 +7,9 @@ import math
 import time
 
 from PySide6.QtCore import (
-    Property,
     QEasingCurve,
     QPointF,
     QPropertyAnimation,
-    QRect,
     QRectF,
     QSize,
     Qt,
@@ -19,14 +17,17 @@ from PySide6.QtCore import (
     QVariantAnimation,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QComboBox,
     QDialog,
+    QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QListView,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -305,10 +306,10 @@ class SegmentedControl(QWidget):
         h = self.height()
         widths, lefts = self._widths(), self._lefts()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#E9E9E9"))
+        p.setBrush(style.TRACK)
         p.drawRoundedRect(QRectF(0, 0, lefts[-1] + widths[-1] + 4, h), h / 2, h / 2)
         if 0 <= self._hover != self._index:
-            p.setBrush(QColor("#DEDEDE"))
+            p.setBrush(style.TRACK_HOVER)
             p.drawRoundedRect(QRectF(lefts[self._hover], 4, widths[self._hover], h - 8), (h - 8) / 2, (h - 8) / 2)
         # La píldora blanca: su ancho sigue al desplazamiento entre dos opciones.
         w = widths[self._index]
@@ -320,11 +321,11 @@ class SegmentedControl(QWidget):
                 w = widths[prev] + (widths[self._index] - widths[prev]) * frac
         p.setBrush(QColor(0, 0, 0, 22))
         p.drawRoundedRect(QRectF(self._x, 5, w, h - 8), (h - 8) / 2, (h - 8) / 2)
-        p.setBrush(QColor("white"))
+        p.setBrush(style.THUMB)
         p.drawRoundedRect(QRectF(self._x, 4, w, h - 8), (h - 8) / 2, (h - 8) / 2)
         p.setFont(self._font)
         for i, ((_k, text, _h), left, width) in enumerate(zip(self._options, lefts, widths)):
-            p.setPen(style.ACCENT if i == self._index else style.TEXT_SOFT)
+            p.setPen((style.TEXT if style.DARK else style.ACCENT) if i == self._index else style.TEXT_SOFT)
             p.drawText(QRectF(left, 0, width, h), Qt.AlignmentFlag.AlignCenter, text)
         p.end()
 
@@ -377,7 +378,7 @@ class IconButton(QAbstractButton):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(bg)
         p.drawRoundedRect(r, 10, 10)
-        color = style.TEXT if self.isEnabled() else QColor("#A8A8A8")
+        color = style.TEXT if self.isEnabled() else style.DISABLED
         p.setPen(color)
         p.setFont(self._glyph_font or style.icon_font(18))
         p.drawText(QRectF(r.left(), r.top() + 6, r.width(), 32), Qt.AlignmentFlag.AlignCenter, self._icon)
@@ -395,7 +396,7 @@ class Toast(QLabel):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setFont(style.ui_font(13))
-        self.setStyleSheet("QLabel { background: rgba(32, 32, 32, 230); color: white; border-radius: 22px; padding: 11px 24px; }")
+        self.setObjectName("toast")
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._effect = QGraphicsOpacityEffect(self)
         self._effect.setOpacity(0.0)
@@ -462,7 +463,7 @@ class SoftProgress(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect())
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#E6E6E6"))
+        p.setBrush(style.TRACK)
         p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
         if self._shown > 0:
             p.setBrush(style.ACCENT)
@@ -492,10 +493,265 @@ class StepDots(QWidget):
         for i in range(self._count):
             closeness = max(0.0, 1 - abs(self._pos - i))
             w = 8 + 14 * closeness
-            p.setBrush(_mix(QColor("#C8C8C8"), style.ACCENT, closeness))
+            p.setBrush(_mix(style.SCROLL, style.ACCENT, closeness))
             x = i * 22 + 4 - (w - 8) / 2 + 4
             p.drawRoundedRect(QRectF(x, 4, w, 8), 4, 4)
         p.end()
+
+
+# -- piezas pequeñas: insignia, botón píldora, interruptor, desplegable ------------------------------------------------
+
+
+class Badge(QWidget):
+    """Círculo de color suave con un icono dentro. `color` es el nombre de un color de `style` (sigue al tema)."""
+
+    def __init__(self, icon: str, color: str = "ACCENT", size: int = 96, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._icon = icon
+        self._color = color
+        self.setFixedSize(size, size)
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = getattr(style, self._color)
+        bg = QColor(color)
+        bg.setAlpha(45 if style.DARK else 30)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(bg)
+        p.drawEllipse(QRectF(self.rect()))
+        p.setPen(color)
+        p.setFont(style.icon_font(self.width() * 0.3))
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._icon)
+        p.end()
+
+
+class PillButton(QAbstractButton):
+    """Botón redondeado con icono y texto, para acciones secundarias junto al botón de hablar."""
+
+    def __init__(self, icon: str, text: str, parent: QWidget | None = None, size: float = 14):
+        super().__init__(parent)
+        self._icon = icon
+        self._size = size
+        self.setText(text)
+        self.setAccessibleName(text)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+
+    def sizeHint(self) -> QSize:
+        from PySide6.QtGui import QFontMetrics
+
+        w = QFontMetrics(style.ui_font(self._size, QFont.Weight.DemiBold)).horizontalAdvance(self.text())
+        return QSize(int(w + self._size * 1.6 + 58), 60)
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -3.5)
+        radius = r.height() / 2
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0, 26))
+        p.drawRoundedRect(r.translated(0, 2), radius, radius)
+        bg = style.PRESSED if self.isDown() else (style.HOVER if self.underMouse() else style.SURFACE)
+        p.setBrush(bg)
+        p.setPen(QPen(style.BORDER, 1))
+        p.drawRoundedRect(r, radius, radius)
+        icon_w = self._size * 1.6
+        text_font = style.ui_font(self._size, QFont.Weight.DemiBold)
+        p.setFont(text_font)
+        text_w = p.fontMetrics().horizontalAdvance(self.text())
+        x = r.center().x() - (icon_w + 10 + text_w) / 2
+        p.setPen(style.ACCENT if self.isEnabled() else style.DISABLED)
+        p.setFont(style.icon_font(self._size * 1.05))
+        p.drawText(QRectF(x, r.top(), icon_w, r.height()), Qt.AlignmentFlag.AlignCenter, self._icon)
+        p.setPen(style.TEXT if self.isEnabled() else style.DISABLED)
+        p.setFont(text_font)
+        p.drawText(QRectF(x + icon_w + 10, r.top(), text_w + 4, r.height()), Qt.AlignmentFlag.AlignVCenter, self.text())
+        p.end()
+
+
+def _paint_switch(p: QPainter, r: QRectF, pos: float) -> None:
+    """Interruptor: `pos` 0 apagado … 1 encendido."""
+    p.setPen(QPen(_mix(style.TEXT_FAINT, style.ACCENT, pos), 1))
+    p.setBrush(_mix(style.TRACK, style.ACCENT, pos))
+    p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+    d = r.height() - 8
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(_mix(style.TEXT_SOFT, QColor("white"), pos))
+    p.drawEllipse(QRectF(r.left() + 4 + (r.width() - 8 - d) * pos, r.top() + 4, d, d))
+
+
+class Switch(QAbstractButton):
+    """Interruptor de encendido y apagado, grande y animado."""
+
+    def __init__(self, checked: bool = False, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setChecked(checked)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(54, 30)
+        self._pos = 1.0 if checked else 0.0
+        self._anim = QVariantAnimation(self, duration=160, easingCurve=QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(lambda v: (setattr(self, "_pos", float(v)), self.update()))
+        self.toggled.connect(self._animate)
+
+    def _animate(self, checked: bool) -> None:
+        self._anim.stop()
+        self._anim.setStartValue(self._pos)
+        self._anim.setEndValue(1.0 if checked else 0.0)
+        self._anim.start()
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        _paint_switch(p, QRectF(self.rect()).adjusted(1, 1, -1, -1), self._pos)
+        p.end()
+
+
+class Combo(QComboBox):
+    """Desplegable con la misma letra que el resto: la lista también sigue la hoja de estilo."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setView(QListView())
+        self.setFont(style.ui_font(14))
+        self.view().setFont(style.ui_font(14))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMaxVisibleItems(10)
+
+
+# -- panel del menú «Más» ---------------------------------------------------------------------------------------------
+
+
+class MenuRow(QAbstractButton):
+    """Una fila del panel: icono, texto y, a la derecha, el atajo o un interruptor."""
+
+    def __init__(self, icon: str, text: str, hint: str = "", toggle: bool | None = None, parent=None):
+        super().__init__(parent)
+        self._icon = icon
+        self._hint = hint
+        self.setText(text)
+        self.setAccessibleName(text)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self.setFixedHeight(50)
+        if toggle is not None:
+            self.setCheckable(True)
+            self.setChecked(toggle)
+
+    def sizeHint(self) -> QSize:
+        return QSize(360, 50)
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect())
+        if self.underMouse() or self.isDown():
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(style.PRESSED if self.isDown() else style.HOVER)
+            p.drawRoundedRect(r, 8, 8)
+        p.setPen(style.ACCENT)
+        p.setFont(style.icon_font(15))
+        p.drawText(QRectF(10, 0, 36, r.height()), Qt.AlignmentFlag.AlignCenter, self._icon)
+        right = r.width() - 14
+        if self.isCheckable():
+            _paint_switch(p, QRectF(right - 46, (r.height() - 26) / 2, 46, 26), 1.0 if self.isChecked() else 0.0)
+            right -= 58
+        elif self._hint:
+            p.setPen(style.TEXT_FAINT)
+            p.setFont(style.ui_font(11))
+            hint_w = p.fontMetrics().horizontalAdvance(self._hint)
+            p.drawText(QRectF(right - hint_w, 0, hint_w, r.height()), Qt.AlignmentFlag.AlignVCenter, self._hint)
+            right -= hint_w + 12
+        p.setPen(style.TEXT)
+        p.setFont(style.ui_font(13.5))
+        p.drawText(QRectF(56, 0, right - 56, r.height()), Qt.AlignmentFlag.AlignVCenter, self.text())
+        p.end()
+
+
+class MenuPanel(QWidget):
+    """Menú emergente grande y claro: secciones con título, filas con icono y una fila de botones al pie."""
+
+    def __init__(self, parent: QWidget | None = None):
+        flags = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
+        super().__init__(parent, flags)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 10, 16, 22)
+        self.frame = QFrame(self)
+        self.frame.setObjectName("panel")
+        add_shadow(self.frame, blur=30, dy=6, alpha=60)
+        outer.addWidget(self.frame)
+        self.body = QVBoxLayout(self.frame)
+        self.body.setContentsMargins(8, 10, 8, 10)
+        self.body.setSpacing(0)
+        self.rows: list[MenuRow] = []
+
+    def add_section(self, title: str) -> None:
+        if self.body.count():
+            self.add_separator()
+        label = QLabel(title.upper())
+        label.setProperty("heading", True)
+        label.setFont(style.ui_font(10, QFont.Weight.DemiBold))
+        label.setContentsMargins(14, 4, 0, 4)
+        self.body.addWidget(label)
+
+    def add_separator(self) -> None:
+        line = QFrame()
+        line.setObjectName("separator")
+        self.body.addSpacing(6)
+        self.body.addWidget(line)
+        self.body.addSpacing(6)
+
+    def add_row(self, icon: str, text: str, slot, hint: str = "", toggle: bool | None = None) -> MenuRow:
+        row = MenuRow(icon, text, hint, toggle)
+        if toggle is None:
+            row.clicked.connect(lambda: self._run(slot))
+        else:
+            row.toggled.connect(slot)  # el interruptor no cierra el panel: así se ve el cambio
+        self.body.addWidget(row)
+        self.rows.append(row)
+        return row
+
+    def add_tiles(self, tiles: list[tuple[str, str, object]]) -> None:
+        self.add_separator()
+        line = QHBoxLayout()
+        line.setSpacing(4)
+        for icon, text, slot in tiles:
+            b = IconButton(icon, text)
+            b.clicked.connect(lambda _c=False, slot=slot: self._run(slot))
+            line.addWidget(b, 1)
+            self.rows.append(b)
+        self.body.addLayout(line)
+
+    def add_note(self, text: str) -> None:
+        label = QLabel(text)
+        label.setProperty("soft", True)
+        label.setFont(style.ui_font(11))
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setWordWrap(True)
+        label.setContentsMargins(10, 8, 10, 0)
+        self.body.addWidget(label)
+
+    def texts(self) -> list[str]:
+        return [r.text() for r in self.rows]
+
+    def _run(self, slot) -> None:
+        self.close()
+        QTimer.singleShot(0, slot)  # los diálogos se abren con el panel ya cerrado
+
+    def popup_under(self, widget: QWidget) -> None:
+        """Se abre debajo del botón, alineado con su borde derecho y sin salirse de la pantalla."""
+        self.setFixedWidth(420)
+        self.adjustSize()
+        anchor = widget.mapToGlobal(widget.rect().bottomRight())
+        screen = widget.screen().availableGeometry()
+        x = max(screen.left(), min(anchor.x() - self.width() + 16, screen.right() - self.width()))
+        y = max(screen.top(), min(anchor.y() - 4, screen.bottom() - self.height()))
+        self.move(x, y)
+        self.show()
 
 
 # -- diálogo con letra grande -----------------------------------------------------------------------------------------
@@ -505,27 +761,17 @@ class FriendlyDialog(QDialog):
     """Pregunta o aviso con letra grande y botones claros. `exec()` devuelve el índice del botón pulsado."""
 
     def __init__(self, parent: QWidget | None, title: str, text: str, buttons: list[str], primary: int = 0,
-                 icon: str = style.ICON_HELP, icon_color: QColor = style.ACCENT):
+                 icon: str = style.ICON_HELP, icon_color: str = "ACCENT"):
         super().__init__(parent)
         self.setWindowTitle("Dictador")
         self.setModal(True)
-        self.setStyleSheet(f"QDialog {{ background: white; }}")
+        self.setProperty("surface", True)
         self._choice = -1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(36, 30, 36, 26)
         layout.setSpacing(14)
         head = QHBoxLayout()
-        badge = QLabel(icon)
-        badge.setFont(style.icon_font(22))
-        badge.setFixedSize(52, 52)
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        soft = QColor(icon_color)
-        soft.setAlpha(28)
-        badge.setStyleSheet(
-            f"QLabel {{ background: rgba({soft.red()},{soft.green()},{soft.blue()},{soft.alpha()}); "
-            f"color: {icon_color.name()}; border-radius: 26px; }}"
-        )
-        head.addWidget(badge)
+        head.addWidget(Badge(icon, icon_color, 52))
         head.addSpacing(10)
         heading = QLabel(title)
         heading.setFont(style.display_font(19))
@@ -535,7 +781,7 @@ class FriendlyDialog(QDialog):
         body = QLabel(text)
         body.setFont(style.ui_font(14))
         body.setWordWrap(True)
-        body.setStyleSheet(f"color: {style.TEXT_SOFT.name()};")
+        body.setProperty("soft", True)
         body.setMinimumWidth(460)
         layout.addWidget(body)
         layout.addSpacing(10)
@@ -564,5 +810,5 @@ def ask(parent, title: str, text: str, buttons: list[str], primary: int = 0, **k
 
 
 def tell(parent, title: str, text: str, warning: bool = False) -> None:
-    kw = {"icon": style.ICON_WARNING, "icon_color": QColor("#C47A00")} if warning else {"icon": style.ICON_IDEA}
+    kw = {"icon": style.ICON_WARNING, "icon_color": "WARNING"} if warning else {"icon": style.ICON_IDEA}
     FriendlyDialog(parent, title, text, ["Entendido"], **kw).exec()

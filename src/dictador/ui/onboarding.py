@@ -8,9 +8,8 @@ from __future__ import annotations
 import threading
 
 from PySide6.QtCore import QEasingCurve, QObject, QPoint, QPropertyAnimation, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QFrame,
     QGraphicsOpacityEffect,
@@ -23,23 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from dictador.ui import style
-from dictador.ui.widgets import MicButton, SoftProgress, StepDots
+from dictador.ui.widgets import Badge, Combo, MicButton, SoftProgress, StepDots
 
 TEST_PHRASE = "Hoy hace un día precioso"
-
-
-def _badge(icon: str, color: QColor, size: int = 96) -> QLabel:
-    label = QLabel(icon)
-    label.setFont(style.icon_font(size * 0.36))
-    label.setFixedSize(size, size)
-    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    soft = QColor(color)
-    soft.setAlpha(30)
-    label.setStyleSheet(
-        f"QLabel {{ background: rgba({soft.red()},{soft.green()},{soft.blue()},{soft.alpha()}); color: {color.name()};"
-        f" border-radius: {size // 2}px; }}"
-    )
-    return label
 
 
 def _title(text: str) -> QLabel:
@@ -55,17 +40,17 @@ def _body(text: str, size: float = 16) -> QLabel:
     label.setFont(style.ui_font(size))
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setWordWrap(True)
-    label.setStyleSheet(f"color: {style.TEXT_SOFT.name()};")
+    label.setProperty("soft", True)
     return label
 
 
 class _Page(QWidget):
-    def __init__(self, icon: str, color: QColor, title: str, text: str):
+    def __init__(self, icon: str, color: str, title: str, text: str, badge: int = 96):
         super().__init__()
         self.layout_ = QVBoxLayout(self)
         self.layout_.setContentsMargins(56, 36, 56, 12)
         self.layout_.setSpacing(16)
-        self.badge = _badge(icon, color)
+        self.badge = Badge(icon, color, badge)
         self.layout_.addWidget(self.badge, 0, Qt.AlignmentFlag.AlignHCenter)
         self.title = _title(title)
         self.layout_.addWidget(self.title)
@@ -97,7 +82,7 @@ class DownloadPage(_Page):
     def __init__(self, wizard: Onboarding):
         super().__init__(
             style.ICON_DOWNLOAD,
-            style.ACCENT,
+            "ACCENT",
             "Preparando todo",
             "Estamos descargando lo que el programa necesita para entender su voz y corregir el texto.\n"
             "Puede tardar unos minutos. No hace falta hacer nada.",
@@ -188,9 +173,9 @@ class MicTestPage(_Page):
     def __init__(self, wizard: Onboarding):
         super().__init__(
             style.ICON_MIC,
-            style.ACCENT,
+            "ACCENT",
             "Vamos a probar el micrófono",
-            f"Pulse el botón y diga en voz alta:\n«{TEST_PHRASE}»",
+            f"Pulse el botón y diga cualquier cosa en voz alta, por ejemplo:\n«{TEST_PHRASE}»",
         )
         self.wizard = wizard
         self.mic = MicButton(compact=True)
@@ -198,18 +183,15 @@ class MicTestPage(_Page):
         self.mic.clicked.connect(self.toggle)
         self.add(self.mic)
         self.box = QLabel("Aquí aparecerá lo que diga…")
+        self.box.setObjectName("micBox")
         self.box.setFont(QFont(style.DOCUMENT_FONT, 20))
         self.box.setWordWrap(True)
         self.box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.box.setMinimumSize(560, 96)
-        self.box.setStyleSheet(
-            f"QLabel {{ background: white; border: 1px solid {style.BORDER.name()}; border-radius: 12px;"
-            f" padding: 14px; color: #9A9A9A; }}"
-        )
         self.add(self.box)
         self.feedback = QLabel("")
         self.feedback.setFont(style.ui_font(15, QFont.Weight.DemiBold))
-        self.feedback.setStyleSheet(f"color: {style.SUCCESS.name()};")
+        self.feedback.setProperty("ok", True)
         self.feedback.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.add(self.feedback)
         self.change = QPushButton("¿No le oye? Elegir otro micrófono")
@@ -217,8 +199,8 @@ class MicTestPage(_Page):
         self.change.setCursor(Qt.CursorShape.PointingHandCursor)
         self.change.clicked.connect(self._show_devices)
         self.add(self.change)
-        self.devices = QComboBox()
-        self.devices.setMinimumWidth(420)
+        self.devices = Combo()
+        self.devices.setMinimumWidth(460)
         self.devices.hide()
         self.devices.currentIndexChanged.connect(self._device_changed)
         self.add(self.devices)
@@ -274,16 +256,15 @@ class MicTestPage(_Page):
             self._show(text, live=True)
 
     def _on_sentence(self, text: str) -> None:
+        # Solo se comprueba que el micrófono llega bien: no hace falta decir la frase de ejemplo.
         self._heard = text
         self._show(text, live=False)
-        self.feedback.setText("✓  ¡Muy bien! Le he entendido.")
+        self.feedback.setText("✓  ¡Muy bien! El micrófono funciona y le oigo bien.")
 
     def _show(self, text: str, live: bool) -> None:
-        color = "#8A8A8A" if live else style.TEXT.name()
-        self.box.setStyleSheet(
-            f"QLabel {{ background: white; border: 1px solid {style.BORDER.name()}; border-radius: 12px;"
-            f" padding: 14px; color: {color}; }}"
-        )
+        self.box.setProperty("heard", not live)
+        self.box.style().unpolish(self.box)
+        self.box.style().polish(self.box)
         self.box.setText(text)
 
     def _show_devices(self) -> None:
@@ -313,18 +294,16 @@ class MicTestPage(_Page):
 
 class HowToPage(_Page):
     def __init__(self):
-        super().__init__(style.ICON_IDEA, QColor("#C47A00"), "Así de fácil", "")
+        super().__init__(style.ICON_IDEA, "WARNING", "Así de fácil", "", badge=76)
         self.text.hide()
-        self.badge.setFixedSize(76, 76)
-        self.badge.setStyleSheet(self.badge.styleSheet().replace("border-radius: 48px", "border-radius: 38px"))
         steps = [
             (style.ICON_MIC, "Pulse «Empezar a hablar» y hable con normalidad.\nVerá aparecer lo que dice."),
-            (style.ICON_ENTER, "Para empezar un párrafo nuevo, haga una pausa larga\no diga «punto y aparte»."),
+            (style.ICON_ENTER, "Para empezar un párrafo nuevo, pulse «Nuevo párrafo»,\nhaga una pausa larga o diga «punto y aparte»."),
             (style.ICON_SAVE, "Cuando termine, pulse «Parar» y después «Guardar».\nLas faltas se corrigen solas."),
         ]
         for i, (icon, text) in enumerate(steps, 1):
             card = QFrame()
-            card.setStyleSheet(f"QFrame {{ background: white; border: 1px solid {style.BORDER.name()}; border-radius: 14px; }}")
+            card.setObjectName("card")
             row = QHBoxLayout(card)
             row.setContentsMargins(18, 14, 22, 14)
             row.setSpacing(18)
@@ -332,15 +311,14 @@ class HowToPage(_Page):
             number.setFixedSize(40, 40)
             number.setAlignment(Qt.AlignmentFlag.AlignCenter)
             number.setFont(style.display_font(16))
-            number.setStyleSheet(f"QLabel {{ background: {style.ACCENT.name()}; color: white; border-radius: 20px; border: none; }}")
+            number.setProperty("number", True)
             row.addWidget(number)
             glyph = QLabel(icon)
             glyph.setFont(style.icon_font(20))
-            glyph.setStyleSheet(f"QLabel {{ color: {style.ACCENT.name()}; border: none; }}")
+            glyph.setProperty("accent", True)
             row.addWidget(glyph)
             label = QLabel(text)
             label.setFont(style.ui_font(15))
-            label.setStyleSheet("QLabel { border: none; }")
             row.addWidget(label, 1)
             card.setFixedWidth(640)
             self.add(card)
@@ -358,11 +336,10 @@ class Onboarding(QDialog):
         self.setWindowTitle("Bienvenida a Dictador")
         self.setModal(True)
         self.setFixedSize(840, 730)
-        self.setStyleSheet(f"QDialog {{ background: {style.BACKGROUND.name()}; }}")
 
         welcome = _Page(
             style.ICON_MIC,
-            style.ACCENT,
+            "ACCENT",
             "¡Hola!",
             "Dictador escribe lo que usted dice en voz alta.\n\n"
             "Vamos a dejarlo preparado. Solo hay que hacerlo una vez\ny no tardaremos mucho.",
@@ -370,10 +347,10 @@ class Onboarding(QDialog):
         welcome.finish()
         done = _Page(
             style.ICON_CHECK,
-            style.SUCCESS,
+            "SUCCESS",
             "¡Todo listo!",
             "Ya puede escribir con la voz.\n\n"
-            "Si alguna vez quiere volver a ver esta explicación,\npulse «Más» y luego «Ver la explicación otra vez».",
+            "Si alguna vez quiere volver a ver esta explicación,\npulse «Más» y luego «Ayuda».",
         )
         done.finish()
         if intro_only:

@@ -38,9 +38,35 @@ def test_settings_dialog_roundtrip(app, tmp_path):
     )
     dialog = SettingsDialog(original)
     assert dialog.result_settings() == original
-    dialog.source.setCurrentIndex(1)
-    assert not dialog.managed.isEnabled() and dialog.external.isEnabled()
-    assert dialog.result_settings().managed_enabled is False
+    dialog.where.set_current("cpu")
+    assert dialog.result_settings().managed_device == "cpu"
+    dialog.paragraph_pause.set_current("4000")
+    dialog.theme.set_current("claro")
+    new = dialog.result_settings()
+    assert new.long_pause_ms == 4000 and new.theme == "claro"
+
+
+def test_settings_dialog_keeps_external_server(app):
+    from dictador.ui.settings import SettingsDialog
+
+    original = Settings(managed_enabled=False, llm_model="qwen3.5-4b", long_pause_ms=2700)
+    dialog = SettingsDialog(original)
+    assert dialog.where.current() == "externo"
+    assert dialog.result_settings() == original  # 2700 ms no es una de las tres opciones, pero se respeta
+    dialog.where.set_current("gpu")
+    new = dialog.result_settings()
+    assert new.managed_enabled and new.managed_device == "gpu"
+
+
+def test_theme_switch_changes_colors(app):
+    from dictador.ui import style
+    from dictador.ui.theme import apply_theme
+
+    apply_theme("oscuro")
+    assert style.DARK and style.PAGE.lightness() < 80
+    assert style.PAGE.name() in app.styleSheet()
+    apply_theme("claro")
+    assert not style.DARK and style.PAGE.name().lower() == "#ffffff"
 
 
 def test_other_dialogs(app, tmp_path):

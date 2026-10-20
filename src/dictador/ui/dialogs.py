@@ -8,6 +8,8 @@ import re
 
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QTextBrowser, QVBoxLayout
 
+from dictador.ui import style
+
 _TOKENS = re.compile(r"\s+|[^\s]+")
 
 
@@ -38,10 +40,9 @@ class DiffDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Cambios del corrector")
         self.resize(640, 380)
-        dark = self.palette().base().color().lightness() < 128
         view = QTextBrowser(self)
         view.setHtml(
-            '<p style="font-size:13pt;line-height:140%">' + diff_html(raw, corrected, dark) + "</p>"
+            '<p style="font-size:13pt;line-height:140%">' + diff_html(raw, corrected, style.DARK) + "</p>"
             "<hr><p><b>Original (Parakeet):</b><br>" + html.escape(raw).replace("\n", "<br>") + "</p>"
         )
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)

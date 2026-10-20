@@ -13,7 +13,6 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QPainter,
-    QPalette,
     QTextBlock,
     QTextBlockFormat,
     QTextCharFormat,
@@ -23,6 +22,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QMenu, QTextEdit, QToolTip
 
 from dictador.doc.model import DocumentModel, Paragraph
+from dictador.ui import style
 
 LINE_SEP = " "  # salto de línea dentro de un bloque (versos)
 MARGIN = 26  # margen mínimo; el de la hoja lo fija set_page_margins
@@ -39,6 +39,14 @@ STATUS_TEXT = {
 }
 
 _TOKENS = re.compile(r"\s+|[^\s]+")
+LINE_HEIGHT = 135  # interlineado, en %: el texto respira y se lee mejor
+
+
+def _block_format() -> QTextBlockFormat:
+    fmt = QTextBlockFormat()
+    fmt.setBottomMargin(12)
+    fmt.setLineHeight(LINE_HEIGHT, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+    return fmt
 
 
 def diff_ranges(old: str, new: str) -> list[tuple[int, int]]:
@@ -71,6 +79,7 @@ class DictationEditor(QTextEdit):
         super().__init__(parent)
         self.model = model
         self.highlight_changes = True
+        self.italic = False  # el texto en cursiva, como el que aparece mientras se habla
         self._keys: dict[int, str] = {}  # userState del bloque → id del párrafo
         self._key_of: dict[str, int] = {}
         self._next_key = count(1)
@@ -138,23 +147,17 @@ class DictationEditor(QTextEdit):
         cursor = QTextCursor(block)
         cursor.setPosition(block.position() + max(0, block.length() - 1), QTextCursor.MoveMode.KeepAnchor)
         sel.cursor = cursor
-        color = QColor(223, 246, 221)
+        color = QColor(style.FLASH)
         color.setAlphaF(float(value))
         sel.format.setBackground(color)
         sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         self.setExtraSelections([sel])
 
     def _colors(self) -> dict[str, QColor]:
-        pal = self.palette()
-        dark = pal.color(QPalette.ColorRole.Base).lightness() < 128
-        text = pal.color(QPalette.ColorRole.Text)
-        base = pal.color(QPalette.ColorRole.Base)
-        dim = QColor(
-            (text.red() + base.red()) // 2, (text.green() + base.green()) // 2, (text.blue() + base.blue()) // 2
-        )
         return {
-            "dim": dim,
-            "highlight": QColor(70, 120, 60, 110) if dark else QColor(200, 235, 190),
+            "text": style.DOC_TEXT,
+            "dim": style.TEXT_FAINT,
+            "highlight": style.HIGHLIGHT,
             "dictating": QColor(90, 140, 220, 140),
             "pending": QColor(150, 150, 150, 150),
             "correcting": QColor(60, 130, 240),
@@ -251,9 +254,7 @@ class DictationEditor(QTextEdit):
         else:
             cursor.movePosition(QTextCursor.MoveOperation.End)
             start = cursor.position()
-            bfmt = QTextBlockFormat()
-            bfmt.setBottomMargin(10)
-            cursor.insertBlock(bfmt, fmt)
+            cursor.insertBlock(_block_format(), fmt)
             cursor.block().setUserState(PARTIAL_STATE)
             cursor.insertText(self._partial, fmt)
         self._partial_cursor = QTextCursor(doc)
@@ -362,20 +363,19 @@ class DictationEditor(QTextEdit):
                 cursor.insertText(text)
 
         colors = self._colors()
-        bfmt = QTextBlockFormat()
+        bfmt = _block_format()
         bfmt.setHeadingLevel(1 if p.style == "title" else 0)
         bfmt.setTopMargin(10 if p.style == "title" else 0)
-        bfmt.setBottomMargin(10)
         cursor.setPosition(start)
         cursor.setBlockFormat(bfmt)
 
         base = QTextCharFormat()
-        base.setForeground(colors["dim"] if p.status == "dictating" else self.palette().color(QPalette.ColorRole.Text))
+        base.setForeground(colors["dim"] if p.status == "dictating" else colors["text"])
         base.setBackground(Qt.BrushStyle.NoBrush)
         base.setFontWeight(QFont.Weight.Bold if p.style == "title" else QFont.Weight.Normal)
         default_size = self.document().defaultFont().pointSizeF()
         base.setFontPointSize(default_size * 1.5 if p.style == "title" else default_size)
-        base.setFontItalic(False)
+        base.setFontItalic(self.italic and p.style != "title")
         cursor.setPosition(start)
         cursor.setPosition(start + len(text), QTextCursor.MoveMode.KeepAnchor)
         cursor.setCharFormat(base)
@@ -397,11 +397,9 @@ class DictationEditor(QTextEdit):
                     self._render(block, p)
         self.viewport().update()
 
-    def changeEvent(self, event) -> None:
-        super().changeEvent(event)
-        if event.type() == event.Type.PaletteChange:
-            # Cambio de tema: los colores de los párrafos salen de la paleta.
-            self.refresh_formats()
+    def theme_changed(self) -> None:
+        """Cambio de tema: los colores de los párrafos salen de `style`."""
+        self.refresh_formats()
 
     def _at_bottom(self) -> bool:
         bar = self.verticalScrollBar()

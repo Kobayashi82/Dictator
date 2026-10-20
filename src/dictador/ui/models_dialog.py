@@ -71,8 +71,8 @@ class ModelsDialog(QDialog):
             layout.addWidget(box)
             self._checks.append((box, pack))
         note = QLabel(
-            "<small>Los dos últimos son el corrector integrado (funciona en la CPU o en la GPU, sin "
-            "programas aparte). No hacen falta si usas Ollama, llama-swap u otro servidor.</small>"
+            "<small>Los dos últimos son el corrector: corrige las faltas y la puntuación en este equipo, "
+            "sin conexión.</small>"
         )
         note.setWordWrap(True)
         layout.addWidget(note)

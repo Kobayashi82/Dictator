@@ -93,11 +93,10 @@ def main(argv: list[str] | None = None) -> int:
     if translator.load(QLocale("es_ES"), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
         app.installTranslator(translator)
     app.setFont(style.ui_font(12))
-    app.setStyleSheet(style.stylesheet())
-    # El diseño es claro, como una hoja de Word, sea cual sea el tema de Windows.
-    apply_theme("claro")
-
     settings = Settings.load()
+    # Por defecto, claro como una hoja de Word, sea cual sea el tema de Windows (se cambia en Ajustes).
+    apply_theme(settings.theme)
+
     window = MainWindow(settings, fake_asr=args.fake_asr, fake_llm=args.fake_llm)
     window.show()
     window.offer_recovery()

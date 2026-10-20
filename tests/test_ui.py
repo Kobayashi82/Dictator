@@ -71,9 +71,12 @@ def test_printable_document_has_clean_text(window):
 
 
 def test_more_menu_lists_advanced_options(window):
-    texts = [a.text() for a in window.more_menu().actions()]
-    assert "Ajustes…" in texts and "Ver la explicación otra vez" in texts
-    assert any(t.startswith("Corrector:") for t in texts)
+    panel = window.more_menu()
+    texts = panel.texts()
+    assert "Ajustes" in texts and "Ayuda" in texts and "Salir" in texts
+    assert "Marcar lo que se ha corregido" in texts
+    assert "Reintentar los párrafos sin corregir" not in texts  # solo aparece si hay alguno
+    panel.close()
 
 
 def test_corrected_paragraph_flashes(app, window):
@@ -101,7 +104,7 @@ def test_onboarding_walkthrough(app, window):
     assert window.suppress_dictation
     wizard.current().toggle()
     pump(app, 2.0)
-    assert "Le he entendido" in wizard.current().feedback.text()
+    assert "El micrófono funciona" in wizard.current().feedback.text()
     assert window.model.paragraphs == []  # la prueba no escribe en el documento
     wizard.next()
     assert not window.suppress_dictation and not window.engine.running
