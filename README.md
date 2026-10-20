@@ -12,13 +12,17 @@ Micrófono → Silero VAD → frases (pausa corta) → Parakeet → editor
                        → párrafo (pausa larga) → cola → LLM → salvaguarda → editor
 ```
 
-- **Pausa corta** (0,8 s): cierra una frase, que se transcribe (~0,1 s) y se añade al párrafo, en gris.
-- **Pausa larga** (2,5 s): cierra el párrafo y lo manda al corrector. La marca del margen cambia de color:
-  azul = corrigiendo, verde = corregido, naranja = corrección descartada, morado = editado a mano.
+- **Texto en vivo:** mientras hablas, lo que dices aparece en cursiva gris al final del documento (se re-transcribe
+  la frase en curso cada ~0,4 s). No hace falta esperar a ninguna pausa para verlo.
+- **Pausa corta** (0,8 s): cierra la frase, que queda fija en el párrafo.
+- **Pausa larga** (2,5 s), «punto y aparte» o `Ctrl+Intro`: cierra el párrafo y lo manda al corrector. La marca del
+  margen cambia de color: azul = corrigiendo, verde = corregido, naranja = corrección descartada, morado = editado.
+- **Poesía:** pausas propias, más cortas: 0,35 s cierra el verso (cada uno en su línea) y 1,3 s la estrofa. Si dos
+  versos llegan juntos, se separan por la puntuación que pone Parakeet.
 - Cada párrafo guarda el **texto original y el corregido**. Clic en la marca del margen (o botón derecho):
   ver cambios, revertir al original, volver a corregir.
 - Si editas un párrafo a mano, el corrector ya no lo toca.
-- **Modos:** Prosa, Poesía (cada frase es un verso; la pausa larga cierra la estrofa), Notas/Lista y Sin corrección.
+- **Modos:** Prosa, Poesía, Notas/Lista y Sin corrección.
 - **Comandos de voz:** «punto y aparte», «nuevo párrafo», «nueva estrofa», «borra la última frase», «título …».
 - **Glosario** general (Ajustes) y por documento (Documento › Glosario) para nombres propios y vocabulario raro.
 
@@ -35,6 +39,19 @@ En **Herramientas › Ajustes › Corrector** se elige:
 Una **salvaguarda** rechaza las correcciones que cambian demasiado el texto (distancia de edición, longitud, número de
 versos) y limpia los preámbulos típicos («Aquí tienes…»). Si el corrector falla o no responde, el dictado sigue y el
 párrafo se queda con el texto de Parakeet; Documento › Reintentar lo vuelve a intentar.
+
+## ¿Y los párrafos sin pausas?
+
+Se probó a que el corrector decidiera dónde empieza cada párrafo (frase a frase, con el inicio del Quijote y sus
+párrafos reales). Qwen3.5 2B no separó ninguno; Qwen3.5 4B, uno de tres; y la probabilidad que dan a «párrafo nuevo»
+no distingue los saltos reales del resto. Con modelos pequeños no es fiable, así que los párrafos salen de la voz:
+pausa larga (ajustable), «punto y aparte» o `Ctrl+Intro`.
+
+## Diagnóstico
+
+Ajustes › Dictado › «Guardar el audio de cada sesión» graba el audio y la probabilidad de voz de cada trama en
+`%LOCALAPPDATA%\Dictado\diagnostico`. Con `dictado --transcribe sesion.wav` se puede repetir el corte y la
+transcripción sin micrófono.
 
 ## Archivos
 

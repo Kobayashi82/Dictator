@@ -50,8 +50,14 @@ class FakeASR:
 
     def __init__(self, *_args, latency: float = 0.3):
         self._cycle = itertools.cycle(_FAKE_SENTENCES)
+        self._next = next(self._cycle)
         self.latency = latency
+
+    def peek(self) -> str:
+        """La frase que saldrá a continuación (para simular el texto en vivo)."""
+        return self._next
 
     def transcribe(self, audio: np.ndarray | None = None) -> str:
         time.sleep(self.latency)
-        return next(self._cycle)
+        text, self._next = self._next, next(self._cycle)
+        return text

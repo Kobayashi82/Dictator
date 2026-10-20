@@ -166,3 +166,68 @@ def test_diff_ranges():
     changed = [new[a:b] for a, b in ranges]
     assert "tal" not in " ".join(changed)
     assert any("qué" in c for c in changed)
+
+
+# -- texto en vivo --------------------------------------------------------------------------------------------------
+
+
+def test_partial_in_empty_document_is_not_part_of_model(ed):
+    model, editor = ed
+    editor.set_partial("hola qué")
+    assert blocks(editor) == ["hola qué"]
+    editor.reconcile()
+    assert model.paragraphs == []
+    editor.set_partial("")
+    assert blocks(editor) == [""]
+
+
+def test_partial_follows_dictating_paragraph(ed):
+    model, editor = ed
+    model.append_sentence("Uno.", "prosa")
+    editor.set_partial("dos tres")
+    assert blocks(editor) == ["Uno. dos tres"]
+    model.append_sentence("Dos tres.", "prosa")  # la frase se cierra…
+    assert blocks(editor) == ["Uno. Dos tres. dos tres"]  # …y el en vivo sigue detrás hasta que llega el vacío
+    editor.set_partial("")
+    assert blocks(editor) == ["Uno. Dos tres."]
+    assert model.paragraphs[0].text == "Uno. Dos tres."
+
+
+def test_partial_after_closed_paragraph_gets_its_own_block(ed):
+    model, editor = ed
+    model.append_sentence("Uno.", "prosa")
+    model.close_paragraph(correct=False)
+    editor.set_partial("empieza otro")
+    assert blocks(editor) == ["Uno.", "empieza otro"]
+    editor.set_partial("empieza otro párrafo")
+    assert blocks(editor) == ["Uno.", "empieza otro párrafo"]
+    model.append_sentence("Empieza otro párrafo.", "prosa")
+    editor.set_partial("")
+    assert blocks(editor) == ["Uno.", "Empieza otro párrafo."]
+    assert [p.text for p in model.paragraphs] == ["Uno.", "Empieza otro párrafo."]
+
+
+def test_partial_in_poetry_goes_on_new_line(ed):
+    model, editor = ed
+    model.append_sentence("Verde que te quiero verde.", "poesia")
+    editor.set_partial("verde viento")
+    assert blocks(editor) == ["Verde que te quiero verde.\nverde viento"]
+
+
+def test_user_edit_with_partial_on_screen(ed):
+    model, editor = ed
+    p = model.append_sentence("Uno.", "prosa")
+    editor.set_partial("en vivo")
+    type_at(editor, 0, "X")
+    assert p.text == "XUno."
+    assert blocks(editor) == ["XUno. en vivo"]
+
+
+def test_partial_survives_correction_of_previous_paragraph(ed):
+    model, editor = ed
+    p = model.append_sentence("uno", "prosa")
+    model.close_paragraph(correct=True)
+    editor.set_partial("sigo")
+    model.set_status(p.id, "correcting")
+    model.apply_correction(p.id, "uno", "Uno.")
+    assert blocks(editor) == ["Uno.", "sigo"]

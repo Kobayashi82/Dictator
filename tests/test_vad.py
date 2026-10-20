@@ -101,3 +101,30 @@ def test_real_audio_with_silero():
     # Grabación: 2 frases, pausa de 3,2 s, 2 frases y silencio final.
     assert ["F" if isinstance(e, Sentence) else "P" for e in out] == ["F", "F", "P", "F", "F", "P"]
     assert all(isinstance(e, ParagraphBreak) or len(e.audio) > 16000 for e in out)
+
+
+def test_background_noise_between_thresholds_still_closes_sentence():
+    # Tras la voz, ruido a 0,4: la histéresis lo cuenta como voz, pero no puede alargar la frase para siempre.
+    seg = Segmenter(short_pause_ms=800, threshold=0.5)
+    events = run(seg, [(0.9, 1000), (0.4, 2000)])
+    assert kinds(events) == ["F"]
+    (t, sentence), = events
+    assert t <= 1000 + 1700
+
+
+def test_configure_changes_pauses_live():
+    seg = Segmenter(short_pause_ms=800, long_pause_ms=2500)
+    seg.configure(350, 1300)
+    events = run(seg, [(0.9, 800), (0.0, 450), (0.9, 800), (0.0, 1500)])
+    assert kinds(events) == ["F", "F", "P"]
+
+
+def test_current_audio_grows_while_speaking():
+    seg = Segmenter()
+    assert seg.current_audio() is None
+    run(seg, [(0.9, 640)])
+    first = len(seg.current_audio())
+    run(seg, [(0.9, 320)])
+    assert len(seg.current_audio()) > first
+    run(seg, [(0.0, 1000)])
+    assert seg.current_audio() is None

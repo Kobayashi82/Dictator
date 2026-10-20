@@ -49,3 +49,16 @@ def test_title():
 )
 def test_normal_sentences_are_text(said):
     assert parse(said) == [Text(said)]
+
+
+def test_split_verses():
+    from dictado.commands import split_verses
+
+    assert split_verses("Verde que te quiero verde. Verde viento verdes ramas. El barco sobre la mar.") == [
+        "Verde que te quiero verde.",
+        "Verde viento verdes ramas.",
+        "El barco sobre la mar.",
+    ]
+    assert split_verses("Ay, qué dolor, ay. ¡Me muero!") == ["Ay, qué dolor, ay.", "¡Me muero!"]
+    assert split_verses("Llegó el Sr. García a caballo.") == ["Llegó el Sr. García a caballo."]
+    assert split_verses("verso sin punto final") == ["verso sin punto final"]

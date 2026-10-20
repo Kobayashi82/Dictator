@@ -76,8 +76,7 @@ class Segmenter:
     ):
         self.threshold = threshold
         self.neg_threshold = max(0.0, threshold - 0.15)
-        self.short_frames = max(1, round(short_pause_ms / FRAME_MS))
-        self.long_frames = max(self.short_frames + 1, round(long_pause_ms / FRAME_MS))
+        self.configure(short_pause_ms, long_pause_ms)
         self.min_speech_frames = max(1, round(min_speech_ms / FRAME_MS))
         self.max_frames = max(2, round(max_sentence_s * 1000 / FRAME_MS))
         self.tail_frames = round(tail_ms / FRAME_MS)
@@ -86,8 +85,20 @@ class Segmenter:
         self._in_speech = False
         self._speech_frames = 0
         self._silence = 0  # tramas seguidas sin voz
+        self._weak = 0  # tramas seguidas por debajo del umbral (aunque la histéresis las cuente como voz)
         self._sentence_open = False  # hay frases en el párrafo desde el último salto
         self.speaking = False
+
+    def configure(self, short_pause_ms: float, long_pause_ms: float) -> None:
+        """Cambia las pausas en caliente (p. ej. al pasar a modo poesía)."""
+        self.short_frames = max(1, round(short_pause_ms / FRAME_MS))
+        self.long_frames = max(self.short_frames + 1, round(long_pause_ms / FRAME_MS))
+
+    def current_audio(self) -> np.ndarray | None:
+        """El audio de la frase que se está diciendo ahora (para la transcripción en vivo)."""
+        if not self._in_speech or not self._frames:
+            return None
+        return np.concatenate(self._frames)
 
     def feed(self, frame: np.ndarray, prob: float) -> list[Event]:
         events: list[Event] = []
@@ -116,9 +127,15 @@ class Segmenter:
             self._silence = 0
         else:
             self._silence += 1
+        self._weak = self._weak + 1 if prob < self.threshold else 0
 
         if self._silence >= self.short_frames:
             events.extend(self._emit(trim=self._silence))
+        elif self._weak >= 2 * self.short_frames:
+            # Ruido de fondo que la VAD no termina de dar por silencio: la frase acabó igualmente.
+            weak = self._weak
+            self._silence = weak
+            events.extend(self._emit(trim=weak))
         elif len(self._frames) >= self.max_frames:
             events.extend(self._emit(trim=0, forced=True))
             # Seguimos dentro de la voz: la siguiente frase empieza ya.
@@ -136,6 +153,7 @@ class Segmenter:
         self._frames = []
         self._in_speech = False
         self._speech_frames = 0
+        self._weak = 0
         if speech < self.min_speech_frames or not frames:
             # Un ruido corto: no es una frase. Si había un párrafo abierto, la pausa sigue contando.
             self._silence = silence

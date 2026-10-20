@@ -47,8 +47,12 @@ class Settings:
     # Segmentación
     short_pause_ms: int = 800
     long_pause_ms: int = 2500
+    poetry_verse_pause_ms: int = 350
+    poetry_stanza_pause_ms: int = 1300
     vad_threshold: float = 0.5
     max_sentence_s: float = 20.0
+    live_text: bool = True  # mostrar lo que se dice mientras se habla
+    save_session_audio: bool = False  # diagnóstico
 
     # LLM
     llm_base_url: str = "http://localhost:8080/v1"

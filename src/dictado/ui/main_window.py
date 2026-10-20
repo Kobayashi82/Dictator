@@ -56,6 +56,10 @@ class MainWindow(QMainWindow):
         self.engine.state.connect(self._on_engine_state)
         self.engine.error.connect(self._on_engine_error)
         self.engine.asr_busy.connect(self._on_asr_busy)
+        self.engine.partial.connect(self._on_partial)
+        self.engine.recording_saved.connect(
+            lambda path: self.statusBar().showMessage(f"Audio de diagnóstico guardado en {path}", 10_000)
+        )
 
         self.corrector = CorrectionQueue(self)
         self.corrector.started.connect(self._on_correction_started)
@@ -202,6 +206,7 @@ class MainWindow(QMainWindow):
             if not self.ensure_models():
                 self.act_dictate.setChecked(False)
                 return
+            self.engine.set_mode(self.model.mode)
             self.engine.start()
             self.act_dictate.setChecked(True)
             self.act_dictate.setText("❚❚ Pausa")
@@ -246,7 +251,10 @@ class MainWindow(QMainWindow):
         actions = commands.parse(text) if self.settings.voice_commands else [commands.Text(text)]
         for action in actions:
             if isinstance(action, commands.Text):
-                self.model.append_sentence(action.text, self.model.mode)
+                mode = self.model.mode
+                # En poesía cada frase es un verso; si llegan dos versos juntos, se separan por su puntuación.
+                for piece in commands.split_verses(action.text) if mode == "poesia" else [action.text]:
+                    self.model.append_sentence(piece, mode)
             elif isinstance(action, commands.NewParagraph):
                 self.model.close_paragraph(correct=True)
                 self.statusBar().showMessage("Comando: nuevo párrafo", 2500)
@@ -260,9 +268,14 @@ class MainWindow(QMainWindow):
     def on_paragraph_break(self) -> None:
         self.model.close_paragraph(correct=True)
 
+    def _on_partial(self, text: str) -> None:
+        # Una vista previa que llegue tarde, con el dictado ya parado, no se muestra.
+        self.editor.set_partial(text if self.engine.running else "")
+
     def _on_mode_changed(self, _index: int) -> None:
         mode = self.mode_combo.currentData()
         self.model.mode = mode
+        self.engine.set_mode(mode)
         self.settings.mode = mode
         current = self.model.current()
         if current is not None:
@@ -274,6 +287,10 @@ class MainWindow(QMainWindow):
 
     def _on_engine_state(self, state: str) -> None:
         self.state_label.setText({"cargando": "Cargando…", "escuchando": "Escuchando", "parado": "Parado"}[state])
+        # Mientras se dicta, deshacer mezclaría el texto que llega con lo que escribe el usuario.
+        self.editor.setUndoRedoEnabled(state == "parado")
+        if state == "parado":
+            self.editor.set_partial("")
         if state == "parado" and self.act_dictate.isChecked():
             self.act_dictate.setChecked(False)
             self.act_dictate.setText("● Dictar")
@@ -332,6 +349,7 @@ class MainWindow(QMainWindow):
         self.mode_combo.blockSignals(True)
         self.mode_combo.setCurrentIndex(MODES.index(mode) if mode in MODES else 0)
         self.mode_combo.blockSignals(False)
+        self.engine.set_mode(mode)
         self.settings.add_recent(str(path))
         self._update_title()
         self.after_open()
@@ -648,10 +666,9 @@ class MainWindow(QMainWindow):
         new = dialog.result_settings()
         restart = self.engine.running and (
             new.input_device != self.settings.input_device
-            or new.short_pause_ms != self.settings.short_pause_ms
-            or new.long_pause_ms != self.settings.long_pause_ms
             or new.vad_threshold != self.settings.vad_threshold
             or new.models_dir != self.settings.models_dir
+            or new.save_session_audio != self.settings.save_session_audio
         )
         for name, value in vars(new).items():
             setattr(self.settings, name, value)
@@ -662,9 +679,10 @@ class MainWindow(QMainWindow):
         self.editor.set_text_font("Georgia", self.settings.font_size)
         self.set_theme(self.settings.theme)
         self._autosave.start(max(10, self.settings.autosave_s) * 1000)
+        self.engine.set_mode(self.model.mode)  # las pausas se aplican en caliente
         self.configure_llm()
         if restart:
-            self.statusBar().showMessage("Los cambios del micrófono y las pausas se aplican al volver a dictar.", 6000)
+            self.statusBar().showMessage("Los cambios del micrófono se aplican al volver a dictar.", 6000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self.maybe_save():

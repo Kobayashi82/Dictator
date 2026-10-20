@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from contextlib import contextmanager
 from itertools import count
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
@@ -24,6 +25,7 @@ from dictado.doc.model import DocumentModel, Paragraph
 
 LINE_SEP = " "  # salto de línea dentro de un bloque (versos)
 MARGIN = 26
+PARTIAL_STATE = -2  # bloque que solo contiene el texto en vivo (no pertenece al modelo)
 
 STATUS_TEXT = {
     "dictating": "Dictando…",
@@ -72,7 +74,10 @@ class DictationEditor(QTextEdit):
         self._key_of: dict[str, int] = {}
         self._next_key = count(1)
         self._sync = False  # cambios hechos por el programa, no por el usuario
+        self._depth = 0
         self._dirty = False
+        self._partial = ""  # lo que se está diciendo ahora, aún sin cerrar
+        self._partial_cursor: QTextCursor | None = None  # selección que cubre ese texto en el documento
 
         self.setAcceptRichText(False)
         self.setTabChangesFocus(False)
@@ -138,11 +143,81 @@ class DictationEditor(QTextEdit):
         self._key_of[pid] = key
         block.setUserState(key)
 
+    # -- texto en vivo ---------------------------------------------------------------------------------------------
+
+    @contextmanager
+    def _programmatic(self):
+        """Cambios del programa: no cuentan como ediciones del usuario y el texto en vivo se aparta mientras tanto."""
+        self._depth += 1
+        outer = self._depth == 1
+        if outer:
+            self._sync = True
+            self._take_partial()
+        try:
+            yield
+        finally:
+            if outer:
+                self._put_partial()
+                self._sync = False
+            self._depth -= 1
+
+    def set_partial(self, text: str) -> None:
+        """Muestra (o borra, con "") lo que se está diciendo, en cursiva al final del párrafo en dictado."""
+        text = " ".join(text.split())
+        if text == self._partial:
+            return
+        self._flush()
+        at_bottom = self._at_bottom()
+        with self._programmatic():
+            self._partial = text
+        if at_bottom:
+            self._scroll_to_bottom()
+
+    def _take_partial(self) -> None:
+        cursor, self._partial_cursor = self._partial_cursor, None
+        if cursor is None or not cursor.hasSelection():
+            return
+        # Al borrar un salto de bloque, Qt se queda con el estado del segundo bloque: se restaura el del primero.
+        state = self.document().findBlock(cursor.selectionStart()).userState()
+        cursor.removeSelectedText()
+        cursor.block().setUserState(-1 if state == PARTIAL_STATE else state)
+
+    def _put_partial(self) -> None:
+        if not self._partial:
+            return
+        doc = self.document()
+        cursor = QTextCursor(doc)
+        fmt = QTextCharFormat()
+        fmt.setForeground(self._colors()["dim"])
+        fmt.setFontItalic(True)
+        fmt.setFontPointSize(doc.defaultFont().pointSizeF())
+        current = self.model.current()
+        block = self._block_of(current.id) if current is not None else None
+        if block is not None:
+            start = block.position() + block.length() - 1
+            cursor.setPosition(start)
+            joiner = "" if not block.text() else (LINE_SEP if current.mode == "poesia" else " ")
+            cursor.insertText(joiner + self._partial, fmt)
+        elif not self.model.paragraphs and doc.blockCount() == 1 and not doc.firstBlock().text():
+            start = 0
+            doc.firstBlock().setUserState(PARTIAL_STATE)
+            cursor.insertText(self._partial, fmt)
+        else:
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            start = cursor.position()
+            bfmt = QTextBlockFormat()
+            bfmt.setBottomMargin(10)
+            cursor.insertBlock(bfmt, fmt)
+            cursor.block().setUserState(PARTIAL_STATE)
+            cursor.insertText(self._partial, fmt)
+        self._partial_cursor = QTextCursor(doc)
+        self._partial_cursor.setPosition(start)
+        self._partial_cursor.setPosition(cursor.position(), QTextCursor.MoveMode.KeepAnchor)
+
     # -- del modelo al editor -------------------------------------------------------------------------------------
 
     def rebuild(self) -> None:
-        self._sync = True
-        try:
+        with self._programmatic():
             self._keys.clear()
             self._key_of.clear()
             doc = self.document()
@@ -155,8 +230,6 @@ class DictationEditor(QTextEdit):
                 self._assign(cursor.block(), p.id)
                 self._render(cursor.block(), p)
             doc.clearUndoRedoStacks()
-        finally:
-            self._sync = False
         self.viewport().update()
 
     def _on_added(self, index: int, pid: str) -> None:
@@ -165,8 +238,7 @@ class DictationEditor(QTextEdit):
         if p is None:
             return
         at_bottom = self._at_bottom()
-        self._sync = True
-        try:
+        with self._programmatic():
             doc = self.document()
             cursor = QTextCursor(doc)
             if len(self.model.paragraphs) == 1 and doc.blockCount() == 1 and not doc.firstBlock().text():
@@ -186,8 +258,6 @@ class DictationEditor(QTextEdit):
                 block = cursor.block()
             self._assign(block, pid)
             self._render(block, p)
-        finally:
-            self._sync = False
         if at_bottom:
             self._scroll_to_bottom()
 
@@ -198,11 +268,8 @@ class DictationEditor(QTextEdit):
         if p is None or block is None:
             return
         at_bottom = self._at_bottom()
-        self._sync = True
-        try:
+        with self._programmatic():
             self._render(block, p)
-        finally:
-            self._sync = False
         self.viewport().update()
         if at_bottom:
             self._scroll_to_bottom()
@@ -215,8 +282,7 @@ class DictationEditor(QTextEdit):
             self._keys.pop(key, None)
         if block is None:
             return
-        self._sync = True
-        try:
+        with self._programmatic():
             cursor = QTextCursor(block)
             if self.document().blockCount() == 1:
                 cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
@@ -230,8 +296,6 @@ class DictationEditor(QTextEdit):
                 cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
                 cursor.setPosition(block.position() + block.length() - 1, QTextCursor.MoveMode.KeepAnchor)
                 cursor.removeSelectedText()
-        finally:
-            self._sync = False
         self.viewport().update()
 
     def _render(self, block: QTextBlock, p: Paragraph) -> None:
@@ -279,14 +343,11 @@ class DictationEditor(QTextEdit):
                 cursor.mergeCharFormat(hl)
 
     def refresh_formats(self) -> None:
-        self._sync = True
-        try:
+        with self._programmatic():
             for p in self.model.paragraphs:
                 block = self._block_of(p.id)
                 if block is not None:
                     self._render(block, p)
-        finally:
-            self._sync = False
         self.viewport().update()
 
     def changeEvent(self, event) -> None:
@@ -320,6 +381,11 @@ class DictationEditor(QTextEdit):
     def reconcile(self) -> None:
         """Pasa al modelo lo que el usuario ha cambiado: textos, párrafos nuevos, borrados y uniones."""
         self._dirty = False
+        with self._programmatic():  # el texto en vivo no es del usuario: fuera mientras se compara
+            self._reconcile()
+        self.viewport().update()
+
+    def _reconcile(self) -> None:
         model = self.model
         order: list[str] = []
         seen: set[str] = set()
@@ -349,7 +415,6 @@ class DictationEditor(QTextEdit):
                 key = self._key_of.pop(pid, None)
                 self._keys.pop(key, None)
             model.user_reorder(order)
-        self.viewport().update()
 
     # -- marcas de estado en el margen ----------------------------------------------------------------------------
 

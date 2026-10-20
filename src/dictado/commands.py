@@ -115,6 +115,18 @@ def _words(text: str) -> list[re.Match]:
     return list(re.finditer(r"\S+", text))
 
 
+_VERSE_END = re.compile(
+    r"(?<!\bSr\.)(?<!\bSra\.)(?<!\bDr\.)(?<!\bDra\.)(?<!\bSto\.)(?<!\bSta\.)(?<!\bUd\.)"
+    r"(?<=[.!?…;])\s+(?=[¡¿«\"“(]?[A-ZÁÉÍÓÚÑ])"
+)
+
+
+def split_verses(text: str) -> list[str]:
+    """En poesía, Parakeet suele poner punto al final de cada verso: si dos versos llegan juntos (la pausa entre
+    ellos fue muy corta), se separan por ahí."""
+    return [v.strip() for v in _VERSE_END.split(text.strip()) if v.strip()]
+
+
 def parse(sentence: str) -> list[Action]:
     """Convierte una frase en acciones. Lo que no es un comando sale tal cual como `Text`."""
     sentence = sentence.strip()

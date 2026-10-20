@@ -134,6 +134,24 @@ class SettingsDialog(QDialog):
         self.long_pause.setValue(s.long_pause_ms)
         form.addRow("Pausa que cierra el párrafo:", self.long_pause)
 
+        self.verse_pause = QSpinBox()
+        self.verse_pause.setRange(150, 2000)
+        self.verse_pause.setSingleStep(50)
+        self.verse_pause.setSuffix(" ms")
+        self.verse_pause.setValue(s.poetry_verse_pause_ms)
+        form.addRow("Poesía · pausa que cierra el verso:", self.verse_pause)
+
+        self.stanza_pause = QSpinBox()
+        self.stanza_pause.setRange(500, 10000)
+        self.stanza_pause.setSingleStep(100)
+        self.stanza_pause.setSuffix(" ms")
+        self.stanza_pause.setValue(s.poetry_stanza_pause_ms)
+        form.addRow("Poesía · pausa que cierra la estrofa:", self.stanza_pause)
+
+        self.live_text = QCheckBox("Mostrar el texto mientras hablo (antes de que se cierre la frase)")
+        self.live_text.setChecked(s.live_text)
+        form.addRow(self.live_text)
+
         self.vad_threshold = QDoubleSpinBox()
         self.vad_threshold.setRange(0.1, 0.95)
         self.vad_threshold.setSingleStep(0.05)
@@ -144,6 +162,10 @@ class SettingsDialog(QDialog):
         self.voice_commands = QCheckBox("Reconocer comandos de voz («punto y aparte», «borra la última frase»…)")
         self.voice_commands.setChecked(s.voice_commands)
         form.addRow(self.voice_commands)
+
+        self.save_audio = QCheckBox("Guardar el audio de cada sesión para diagnóstico (en %LOCALAPPDATA%\\Dictado\\diagnostico)")
+        self.save_audio.setChecked(s.save_session_audio)
+        form.addRow(self.save_audio)
         return w
 
     def _llm_tab(self, s: Settings) -> QWidget:
@@ -363,6 +385,10 @@ class SettingsDialog(QDialog):
             input_device=self.device.currentData() or "",
             short_pause_ms=self.short_pause.value(),
             long_pause_ms=max(self.long_pause.value(), self.short_pause.value() + 200),
+            poetry_verse_pause_ms=self.verse_pause.value(),
+            poetry_stanza_pause_ms=max(self.stanza_pause.value(), self.verse_pause.value() + 200),
+            live_text=self.live_text.isChecked(),
+            save_session_audio=self.save_audio.isChecked(),
             vad_threshold=round(self.vad_threshold.value(), 2),
             voice_commands=self.voice_commands.isChecked(),
             llm_base_url=self.base_url.text().strip(),
