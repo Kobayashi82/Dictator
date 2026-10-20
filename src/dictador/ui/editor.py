@@ -377,9 +377,13 @@ class DictationEditor(QTextEdit):
         base.setFontPointSize(default_size * 1.5 if p.style == "title" else default_size)
         base.setFontItalic(self.italic and p.style != "title")
         cursor.setPosition(start)
+        # setBlockCharFormat deja el bloque sin maquetar (el texto desaparecía hasta el siguiente cambio): va antes de
+        # setCharFormat, que sí lo vuelve a maquetar.
+        cursor.setBlockCharFormat(base)
         cursor.setPosition(start + len(text), QTextCursor.MoveMode.KeepAnchor)
         cursor.setCharFormat(base)
-        cursor.setBlockCharFormat(base)
+        if not text:
+            self.document().markContentsDirty(start, 1)
 
         if self.highlight_changes and p.status == "corrected" and not p.show_raw and p.corrected is not None:
             hl = QTextCharFormat()

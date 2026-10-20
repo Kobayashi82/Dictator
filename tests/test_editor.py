@@ -231,3 +231,25 @@ def test_partial_survives_correction_of_previous_paragraph(ed):
     model.set_status(p.id, "correcting")
     model.apply_correction(p.id, "uno", "Uno.")
     assert blocks(editor) == ["Uno.", "sigo"]
+
+
+def test_paragraph_stays_laid_out_after_status_change(ed):
+    """Al cerrar un párrafo largo (solo cambia el formato) el texto no puede quedarse sin maquetar: desaparecía de
+    la pantalla hasta el siguiente cambio."""
+    model, editor = ed
+    editor.resize(800, 600)
+    editor.show()  # sin mostrarse, Qt no maqueta nada
+    model.append_sentence("Una frase bastante larga que ocupa varias líneas. " * 20, "prosa")
+    layout = editor.document().documentLayout()
+
+    def lines():
+        block = editor.document().firstBlock()
+        layout.blockBoundingRect(block)
+        return block.layout().lineCount()
+
+    assert lines() > 1
+    model.close_paragraph(correct=True)  # dictating → pending: solo cambia el color
+    assert lines() > 1
+    editor.highlight_changes = False
+    editor.refresh_formats()
+    assert lines() > 1

@@ -41,6 +41,7 @@ class ManagedServer:
         args = [
             self.exe,
             "-m", self.model,
+            "--alias", self.model_name,  # sin esto el servidor se presenta con la ruta del archivo
             "--host", "127.0.0.1",
             "--port", str(self.port),
             "-ngl", str(self.gpu_layers),

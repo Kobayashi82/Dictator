@@ -38,6 +38,28 @@ def _closest(value: int, options: list[tuple[str, str, str]]) -> str:
     return min(options, key=lambda o: abs(int(o[0]) - value))[0]
 
 
+class _WheelOnFocus:
+    """La rueda solo cambia el número si se ha pulsado antes en la casilla; si no, desplaza la página."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class _Spin(_WheelOnFocus, QSpinBox):
+    pass
+
+
+class _DoubleSpin(_WheelOnFocus, QDoubleSpinBox):
+    pass
+
+
 class _Stepper(QWidget):
     """«−  18  +»: más fácil de usar que una casilla con flechitas."""
 
@@ -253,7 +275,7 @@ class SettingsDialog(QDialog):
             return lab
 
         def spin(low, high, step, value, suffix="", double=False):
-            box = QDoubleSpinBox() if double else QSpinBox()
+            box = _DoubleSpin() if double else _Spin()
             box.setRange(low, high)
             box.setSingleStep(step)
             box.setValue(value)

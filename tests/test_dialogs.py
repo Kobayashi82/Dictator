@@ -78,3 +78,21 @@ def test_other_dialogs(app, tmp_path):
     dialog = ModelsDialog(tmp_path, first_run=True)
     assert dialog.download_button.isEnabled()
     assert "line-through" in diff_html("uno dos", "uno tres")
+
+
+def test_settings_wheel_scrolls_page_not_controls(app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+
+    from dictador.ui.settings import SettingsDialog
+
+    dialog = SettingsDialog(Settings())
+    dialog.device.addItem("Otro micrófono", "otro")
+    combo, spin = dialog.device, dialog.autosave
+    before = (combo.currentIndex(), spin.value())
+    for widget in (combo, spin):
+        event = QWheelEvent(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, -120), Qt.MouseButton.NoButton,
+                            Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+        app.sendEvent(widget, event)
+        assert not event.isAccepted()  # pasa a la página, que se desplaza
+    assert (combo.currentIndex(), spin.value()) == before

@@ -620,6 +620,10 @@ class Combo(QComboBox):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMaxVisibleItems(10)
 
+    def wheelEvent(self, event) -> None:
+        # La rueda desplaza la página en la que está, no cambia el micrófono por sorpresa al pasar por encima.
+        event.ignore()
+
 
 # -- panel del menú «Más» ---------------------------------------------------------------------------------------------
 
