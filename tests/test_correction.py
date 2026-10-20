@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from dictado.config import Settings
+from dictador.config import Settings
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def wait(app, condition, seconds=15):
 
 
 def make_window(settings, fake_llm):
-    from dictado.ui.main_window import MainWindow
+    from dictador.ui.main_window import MainWindow
 
     window = MainWindow(settings, fake_asr=True, fake_llm=fake_llm)
     if fake_llm:

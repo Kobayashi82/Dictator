@@ -197,7 +197,7 @@ def download_packs(
             h = _hasher(f)
             got = 0
             try:
-                request = urllib.request.Request(f.url, headers={"User-Agent": "Dictado"})
+                request = urllib.request.Request(f.url, headers={"User-Agent": "Dictador"})
                 with urllib.request.urlopen(request, timeout=60) as r:
                     with part.open("wb") as out:
                         while chunk := r.read(1 << 20):

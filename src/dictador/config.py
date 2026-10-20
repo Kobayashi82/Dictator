@@ -1,4 +1,4 @@
-"""Ajustes persistentes (JSON en %APPDATA%\\Dictado)."""
+"""Ajustes persistentes (JSON en %APPDATA%\\Dictador)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-APP_NAME = "Dictado"
+APP_NAME = "Dictador"
+_OLD_NAME = "Dictado"  # nombre de las primeras versiones
 
 
 def appdata_dir() -> Path:
@@ -26,6 +27,18 @@ def default_models_dir() -> Path:
 
 def recovery_dir() -> Path:
     return localdata_dir() / "recovery"
+
+
+def migrate_old_folders() -> None:
+    """Las carpetas de datos de cuando el programa se llamaba «Dictado» pasan a «Dictador» (así no hay que volver a
+    descargar los modelos ni se pierden los ajustes)."""
+    for new in (appdata_dir(), localdata_dir()):
+        old = new.with_name(_OLD_NAME)
+        if old.is_dir() and not new.exists():
+            try:
+                old.rename(new)
+            except OSError:
+                pass
 
 
 MODES = ("prosa", "poesia", "notas", "ninguno")
@@ -93,6 +106,9 @@ class Settings:
             return cls()
         known = {f.name for f in fields(cls)}
         settings = cls(**{k: v for k, v in data.items() if k in known})
+        old = str(localdata_dir().with_name(_OLD_NAME))
+        if settings.models_dir.startswith(old):
+            settings.models_dir = str(localdata_dir()) + settings.models_dir[len(old) :]
         if settings.mode not in MODES:
             settings.mode = "prosa"
         return settings

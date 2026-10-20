@@ -1,5 +1,5 @@
-# PyInstaller: `uv run pyinstaller dictado.spec --noconfirm` → dist/Dictado/Dictado.exe
-# Los modelos NO van dentro: se descargan desde la app a %LOCALAPPDATA%\Dictado\models.
+# PyInstaller: `uv run pyinstaller dictador.spec --noconfirm` → dist/Dictador/Dictador.exe
+# Los modelos NO van dentro: se descargan desde la app a %LOCALAPPDATA%\Dictador\models.
 
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
@@ -8,10 +8,10 @@ datas += copy_metadata("onnx-asr")  # onnx_asr lee su versión con importlib.met
 datas += collect_data_files("docx")  # plantilla por defecto de python-docx
 
 a = Analysis(
-    ["src/dictado/__main__.py"],
+    ["src/dictador/__main__.py"],
     pathex=["src"],
     datas=datas,
-    hiddenimports=["dictado.app"],
+    hiddenimports=["dictador.app"],
     excludes=["tkinter", "matplotlib", "scipy", "pandas", "PySide6.QtWebEngineCore", "PySide6.QtQml", "PySide6.QtQuick"],
     noarchive=False,
 )
@@ -21,8 +21,8 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Dictado",
+    name="Dictador",
     console=False,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="Dictado", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="Dictador", upx=False)

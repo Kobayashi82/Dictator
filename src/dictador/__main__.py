@@ -1,5 +1,5 @@
 import sys
 
-from dictado.app import main
+from dictador.app import main
 
 sys.exit(main())

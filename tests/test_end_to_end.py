@@ -1,4 +1,4 @@
-"""Dictado completo con los modelos reales: el WAV de prueba hace de micrófono."""
+"""Dictador completo con los modelos reales: el WAV de prueba hace de micrófono."""
 
 import os
 import time
@@ -11,12 +11,12 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from dictado.audio.vad import FRAME
-from dictado.config import Settings
-from dictado.engine import models_present
+from dictador.audio.vad import FRAME
+from dictador.config import Settings
+from dictador.engine import models_present
 
 DATA = Path(__file__).parent / "data"
-MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictado" / "models"
+MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictador" / "models"
 
 pytestmark = pytest.mark.skipif(not models_present(MODELS), reason="sin modelos de voz")
 
@@ -69,11 +69,11 @@ def run_until_done(app, window, seconds=60):
 
 
 def test_dictation_end_to_end(monkeypatch, tmp_path):
-    import dictado.audio.capture as capture
+    import dictador.audio.capture as capture
 
     monkeypatch.setattr(capture, "AudioCapture", WavCapture)
     app = QApplication.instance() or QApplication([])
-    from dictado.ui.main_window import MainWindow
+    from dictador.ui.main_window import MainWindow
 
     settings = Settings(models_dir=str(MODELS), mode="ninguno")
     window = MainWindow(settings)
@@ -97,7 +97,7 @@ def test_dictation_end_to_end(monkeypatch, tmp_path):
 
 def test_poetry_live_text_verses_and_stanzas(monkeypatch):
     """Poema con 0,45 s entre versos y 1,6 s entre estrofas, leído a 2× tiempo real."""
-    import dictado.audio.capture as capture
+    import dictador.audio.capture as capture
 
     class Poem(WavCapture):
         file = "poema_es.wav"
@@ -106,7 +106,7 @@ def test_poetry_live_text_verses_and_stanzas(monkeypatch):
     captures = []
     monkeypatch.setattr(capture, "AudioCapture", lambda d="": captures.append(Poem(d)) or captures[-1])
     app = QApplication.instance() or QApplication([])
-    from dictado.ui.main_window import MainWindow
+    from dictador.ui.main_window import MainWindow
 
     window = MainWindow(Settings(models_dir=str(MODELS), mode="poesia", llm_model=""))
     partials = []

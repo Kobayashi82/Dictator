@@ -6,7 +6,7 @@ import queue
 
 import numpy as np
 
-from dictado.audio.vad import FRAME, SAMPLE_RATE
+from dictador.audio.vad import FRAME, SAMPLE_RATE
 
 
 def list_input_devices() -> list[str]:

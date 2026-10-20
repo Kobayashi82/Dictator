@@ -1,7 +1,7 @@
 import pytest
 
-from dictado.llm.guard import clean_output, levenshtein, validate
-from dictado.llm.prompts import build_messages, max_tokens_for
+from dictador.llm.guard import clean_output, levenshtein, validate
+from dictador.llm.prompts import build_messages, max_tokens_for
 
 RAW = "nadie esperava la carta que llego ese dia el cartero la dejo en la puerta de la iglesia"
 GOOD = "Nadie esperaba la carta que llegó ese día. El cartero la dejó en la puerta de la iglesia."
@@ -115,7 +115,7 @@ def test_disfluency_cleanup_is_accepted(raw, out):
 
 
 def test_word_changes_ignores_transcription_typos():
-    from dictado.llm.guard import word_changes
+    from dictador.llm.guard import word_changes
 
     assert word_changes("nadie esperava la carta", "Nadie esperaba la carta.") == (0, 0, 4)
     assert word_changes("nadie nadie sabía", "Nadie sabía.") == (0, 1, 3)

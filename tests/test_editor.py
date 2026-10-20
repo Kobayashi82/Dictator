@@ -8,8 +8,8 @@ import pytest
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QApplication
 
-from dictado.doc.model import DocumentModel, Paragraph
-from dictado.ui.editor import DictationEditor, diff_ranges
+from dictador.doc.model import DocumentModel, Paragraph
+from dictador.ui.editor import DictationEditor, diff_ranges
 
 
 @pytest.fixture(scope="module")

@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="dictado", description="Dictado por voz a un documento, en local.")
-    parser.add_argument("archivo", nargs="?", help="proyecto .dictado que abrir")
+    parser = argparse.ArgumentParser(prog="dictador", description="Dictador: dictado por voz a un documento, en local.")
+    parser.add_argument("archivo", nargs="?", help="documento .dictador que abrir")
     parser.add_argument("--fake-asr", action="store_true", help="frases de ejemplo en lugar del micrófono y Parakeet")
     parser.add_argument("--fake-llm", action="store_true", help="corrector simulado en lugar del LLM")
     parser.add_argument(
@@ -27,9 +27,9 @@ def transcribe_file(wav: str) -> int:
 
     import numpy as np
 
-    from dictado.asr.parakeet import ParakeetASR
-    from dictado.audio.vad import FRAME, SAMPLE_RATE, Segmenter, Sentence, SileroVad
-    from dictado.config import Settings
+    from dictador.asr.parakeet import ParakeetASR
+    from dictador.audio.vad import FRAME, SAMPLE_RATE, Segmenter, Sentence, SileroVad
+    from dictador.config import Settings
 
     settings = Settings.load()
     lines = []
@@ -68,20 +68,23 @@ def transcribe_file(wav: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    from dictador.config import migrate_old_folders
+
+    migrate_old_folders()
     if args.transcribe:
         return transcribe_file(args.transcribe)
 
     from PySide6.QtWidgets import QApplication
 
-    from dictado.config import APP_NAME, Settings
-    from dictado.ui.main_window import MainWindow
+    from dictador.config import APP_NAME, Settings
+    from dictador.ui.main_window import MainWindow
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_NAME)
 
     settings = Settings.load()
-    from dictado.ui.theme import apply_theme
+    from dictador.ui.theme import apply_theme
 
     apply_theme(settings.theme)
     window = MainWindow(settings, fake_asr=args.fake_asr, fake_llm=args.fake_llm)
@@ -90,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.archivo:
         window.open_path(Path(args.archivo))
     if not args.fake_asr:
-        from dictado.engine import models_present
+        from dictador.engine import models_present
 
         if models_present(settings.models_path()):
             window.engine.preload()

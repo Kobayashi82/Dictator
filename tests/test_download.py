@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from dictado.models.download import PARAKEET, SILERO, ModelFile, verify
+from dictador.models.download import PARAKEET, SILERO, ModelFile, verify
 
-MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictado" / "models"
+MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictador" / "models"
 
 
 def test_git_blob_hash(tmp_path):

@@ -1,6 +1,6 @@
 # Configurar el corrector (LLM)
 
-Dictado habla con cualquier servidor compatible con la API de OpenAI, en el mismo equipo o en otro de la red.
+Dictador habla con cualquier servidor compatible con la API de OpenAI, en el mismo equipo o en otro de la red.
 Se configura en **Herramientas › Ajustes › Corrector (LLM)**: URL base, modelo y clave API (opcional).
 «Probar conexión» rellena la lista de modelos desde `/v1/models`.
 
@@ -18,7 +18,7 @@ Ollama necesita `OLLAMA_HOST=0.0.0.0` para escuchar fuera de localhost).
 
 Con «Desactivar el razonamiento» marcado, cada petición lleva `reasoning_effort: "none"` (lo que entiende
 Ollama) y `chat_template_kwargs: {"enable_thinking": false}` (llama-server). Si el servidor rechaza esos campos,
-Dictado reintenta sin ellos y añade `/no_think` al prompt. Medido con Ollama y `qwen3.5-4b`: sin desactivarlo, el
+Dictador reintenta sin ellos y añade `/no_think` al prompt. Medido con Ollama y `qwen3.5-4b`: sin desactivarlo, el
 modelo gasta todos los tokens razonando y no devuelve texto; desactivado, un párrafo de ~60 palabras tarda
 menos de un segundo en una RTX 4070 Super.
 

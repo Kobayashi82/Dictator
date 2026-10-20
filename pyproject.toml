@@ -1,7 +1,7 @@
 [project]
-name = "dictado"
+name = "dictador"
 version = "0.1.0"
-description = "Dictado por voz a un documento con Parakeet y corrección por LLM local"
+description = "Dictador: dictado por voz a un documento con Parakeet y corrección por LLM local"
 readme = "README.md"
 authors = [
     { name = "Kobayashi82", email = "Kobayashi82@outlook.com" }
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dictado = "dictado.app:main"
+dictador = "dictador.app:main"
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]

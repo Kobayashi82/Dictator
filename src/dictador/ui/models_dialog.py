@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from dictado.models.download import (
+from dictador.models.download import (
     LLM_PACKS,
     VOICE_PACKS,
     DownloadCancelled,
@@ -40,7 +40,7 @@ class ModelsDialog(QDialog):
     def __init__(self, models_dir: Path, parent=None, first_run: bool = False, include_llm: bool = False):
         super().__init__(parent)
         self.models_dir = Path(models_dir)
-        self.setWindowTitle("Bienvenido a Dictado" if first_run else "Modelos")
+        self.setWindowTitle("Bienvenido a Dictador" if first_run else "Modelos")
         self.setMinimumWidth(520)
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None

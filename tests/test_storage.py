@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from dictado.doc import storage
-from dictado.doc.model import Paragraph
+from dictador.doc import storage
+from dictador.doc.model import Paragraph
 
 
 def sample():
@@ -100,3 +100,24 @@ def test_import_text_and_markdown(tmp_path):
     txt = tmp_path / "b.txt"
     txt.write_bytes("Uno.\r\n\r\nDós.\r\n".encode("cp1252"))
     assert [p.text for p in storage.import_text(txt)] == ["Uno.", "Dós."]
+
+
+def test_old_dictado_files_still_open(tmp_path):
+    path = tmp_path / "viejo.dictado"
+    path.write_text(json.dumps({"format": "dictado", "version": 1, "mode": "prosa", "paragraphs": [{"raw": "Hola."}]}),
+                    encoding="utf-8")
+    paragraphs, mode, _ = storage.load(path)
+    assert [p.text for p in paragraphs] == ["Hola."]
+
+
+def test_old_folders_are_migrated(tmp_path, monkeypatch):
+    from dictador import config
+
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    (tmp_path / "local" / "Dictado" / "models").mkdir(parents=True)
+    (tmp_path / "roaming" / "Dictado").mkdir(parents=True)
+    config.migrate_old_folders()
+    assert (tmp_path / "local" / "Dictador" / "models").is_dir()
+    assert (tmp_path / "roaming" / "Dictador").is_dir()
+    assert not (tmp_path / "local" / "Dictado").exists()

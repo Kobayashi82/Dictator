@@ -1,7 +1,7 @@
 import pytest
 
-from dictado.llm.disfluency import find_hesitations, repair
-from dictado.llm.prompts import build_messages
+from dictador.llm.disfluency import find_hesitations, repair
+from dictador.llm.prompts import build_messages
 
 
 @pytest.mark.parametrize(

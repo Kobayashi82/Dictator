@@ -13,8 +13,8 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from dictado.audio.vad import FRAME_MS, SAMPLE_RATE, ParagraphBreak, Segmenter, Sentence
-from dictado.config import Settings, localdata_dir
+from dictador.audio.vad import FRAME_MS, SAMPLE_RATE, ParagraphBreak, Segmenter, Sentence
+from dictador.config import Settings, localdata_dir
 
 _BREAK = object()  # marcador de párrafo en la cola del ASR
 _STOP = object()
@@ -102,11 +102,11 @@ class DictationEngine(QObject):
         with self._asr_lock:
             if self._asr is None:
                 if self.fake_asr:
-                    from dictado.asr.parakeet import FakeASR
+                    from dictador.asr.parakeet import FakeASR
 
                     self._asr = FakeASR()
                 else:
-                    from dictado.asr.parakeet import ParakeetASR
+                    from dictador.asr.parakeet import ParakeetASR
 
                     self._asr = ParakeetASR(self.settings.models_path())
             return self._asr
@@ -189,8 +189,8 @@ class DictationEngine(QObject):
         return now
 
     def _capture_loop(self) -> None:
-        from dictado.audio.capture import AudioCapture
-        from dictado.audio.vad import SileroVad
+        from dictador.audio.capture import AudioCapture
+        from dictador.audio.vad import SileroVad
 
         self.state.emit("cargando")
         capture = None
@@ -317,6 +317,6 @@ class DictationEngine(QObject):
 
 
 def models_present(models_dir: Path) -> bool:
-    from dictado.models.download import VOICE_PACKS, pack_present
+    from dictador.models.download import VOICE_PACKS, pack_present
 
     return all(pack_present(models_dir, pack) for pack in VOICE_PACKS)

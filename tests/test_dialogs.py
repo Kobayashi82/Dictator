@@ -9,8 +9,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtWidgets import QApplication
 
-import dictado
-from dictado.config import Settings
+import dictador
+from dictador.config import Settings
 
 
 @pytest.fixture
@@ -19,13 +19,13 @@ def app():
 
 
 def test_every_module_imports():
-    for module in pkgutil.walk_packages(dictado.__path__, "dictado."):
-        if module.name != "dictado.__main__":
+    for module in pkgutil.walk_packages(dictador.__path__, "dictador."):
+        if module.name != "dictador.__main__":
             importlib.import_module(module.name)
 
 
 def test_settings_dialog_roundtrip(app, tmp_path):
-    from dictado.ui.settings import SettingsDialog
+    from dictador.ui.settings import SettingsDialog
 
     original = Settings(
         models_dir=str(tmp_path),
@@ -44,8 +44,8 @@ def test_settings_dialog_roundtrip(app, tmp_path):
 
 
 def test_other_dialogs(app, tmp_path):
-    from dictado.ui.dialogs import DiffDialog, GlossaryDialog, diff_html
-    from dictado.ui.models_dialog import ModelsDialog
+    from dictador.ui.dialogs import DiffDialog, GlossaryDialog, diff_html
+    from dictador.ui.models_dialog import ModelsDialog
 
     DiffDialog("hola que tal", "Hola, ¿qué tal?")
     assert GlossaryDialog(["a", "b"]).terms() == ["a", "b"]

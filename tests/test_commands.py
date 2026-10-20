@@ -1,6 +1,6 @@
 import pytest
 
-from dictado.commands import DeleteLastSentence, NewParagraph, Text, Title, fold, parse, phonetic_key
+from dictador.commands import DeleteLastSentence, NewParagraph, Text, Title, fold, parse, phonetic_key
 
 
 def test_fold_and_key():
@@ -52,7 +52,7 @@ def test_normal_sentences_are_text(said):
 
 
 def test_split_verses():
-    from dictado.commands import split_verses
+    from dictador.commands import split_verses
 
     assert split_verses("Verde que te quiero verde. Verde viento verdes ramas. El barco sobre la mar.") == [
         "Verde que te quiero verde.",

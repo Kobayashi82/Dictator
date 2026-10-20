@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dictado.llm.disfluency import repair
+from dictador.llm.disfluency import repair
 
 _COMMON = (
     "El texto viene de un reconocedor de voz en español. "

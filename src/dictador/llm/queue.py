@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 from PySide6.QtCore import QObject, Signal
 
-from dictado.llm import guard
-from dictado.llm.client import LLMError
-from dictado.llm.prompts import build_messages, max_tokens_for
+from dictador.llm import guard
+from dictador.llm.client import LLMError
+from dictador.llm.prompts import build_messages, max_tokens_for
 
 
 @dataclass

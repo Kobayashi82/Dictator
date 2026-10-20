@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dictado.audio.vad import SAMPLE_RATE
+from dictador.audio.vad import SAMPLE_RATE
 
 MODEL_NAME = "nemo-parakeet-tdt-0.6b-v3"
 MODEL_DIR = "parakeet-tdt-0.6b-v3"

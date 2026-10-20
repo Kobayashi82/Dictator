@@ -1,4 +1,4 @@
-"""Modo gestionado: Dictado arranca su propio llama-server (build CPU o Vulkan) y lo para al salir."""
+"""Modo gestionado: Dictador arranca su propio llama-server (build CPU o Vulkan) y lo para al salir."""
 
 from __future__ import annotations
 

@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dictado.config import MODE_LABELS, MODES, Settings, default_models_dir
+from dictador.config import MODE_LABELS, MODES, Settings, default_models_dir
 
 
 class _Probe(QObject):
@@ -78,7 +78,7 @@ class SettingsDialog(QDialog):
         self.mode.setCurrentIndex(MODES.index(s.mode))
         form.addRow("Modo por defecto:", self.mode)
 
-        from dictado.ui.theme import THEME_LABELS, THEMES
+        from dictador.ui.theme import THEME_LABELS, THEMES
 
         self.theme = QComboBox()
         for key in THEMES:
@@ -110,7 +110,7 @@ class SettingsDialog(QDialog):
         self.device = QComboBox()
         self.device.addItem("Predeterminado del sistema", "")
         try:
-            from dictado.audio.capture import list_input_devices
+            from dictador.audio.capture import list_input_devices
 
             for name in list_input_devices():
                 self.device.addItem(name, name)
@@ -163,7 +163,7 @@ class SettingsDialog(QDialog):
         self.voice_commands.setChecked(s.voice_commands)
         form.addRow(self.voice_commands)
 
-        self.save_audio = QCheckBox("Guardar el audio de cada sesión para diagnóstico (en %LOCALAPPDATA%\\Dictado\\diagnostico)")
+        self.save_audio = QCheckBox("Guardar el audio de cada sesión para diagnóstico (en %LOCALAPPDATA%\\Dictador\\diagnostico)")
         self.save_audio.setChecked(s.save_session_audio)
         form.addRow(self.save_audio)
         return w
@@ -311,7 +311,7 @@ class SettingsDialog(QDialog):
         return Path(self.models_dir.text().strip()) if self.models_dir.text().strip() else default_models_dir()
 
     def _update_builtin_status(self) -> None:
-        from dictado.models.download import LLM_PACKS, pack_present
+        from dictador.models.download import LLM_PACKS, pack_present
 
         missing = [p for p in LLM_PACKS if not pack_present(self._models_dir(), p)]
         if missing:
@@ -322,7 +322,7 @@ class SettingsDialog(QDialog):
         self.download_llm.setVisible(bool(missing))
 
     def _download_llm(self) -> None:
-        from dictado.ui.models_dialog import ModelsDialog
+        from dictador.ui.models_dialog import ModelsDialog
 
         ModelsDialog(self._models_dir(), self, include_llm=True).exec()
         self._update_builtin_status()
@@ -361,7 +361,7 @@ class SettingsDialog(QDialog):
         fake = self.fake_llm
 
         def run():
-            from dictado.llm.client import FakeLLMClient, LLMClient, LLMError
+            from dictador.llm.client import FakeLLMClient, LLMClient, LLMError
 
             try:
                 client = FakeLLMClient() if fake else LLMClient(url, "", key, timeout=10)

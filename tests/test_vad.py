@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dictado.audio.vad import FRAME, FRAME_MS, ParagraphBreak, Segmenter, Sentence
+from dictador.audio.vad import FRAME, FRAME_MS, ParagraphBreak, Segmenter, Sentence
 
 DATA = Path(__file__).parent / "data"
-MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictado" / "models"
+MODELS = Path(os.environ.get("LOCALAPPDATA", "")) / "Dictador" / "models"
 
 
 def run(seg: Segmenter, pattern: list[tuple[float, float]]):
@@ -87,7 +87,7 @@ def test_flush_and_manual_paragraph():
 
 @pytest.mark.skipif(not (MODELS / "silero-vad" / "silero_vad.onnx").exists(), reason="sin modelo Silero")
 def test_real_audio_with_silero():
-    from dictado.audio.vad import SileroVad
+    from dictador.audio.vad import SileroVad
 
     with wave.open(str(DATA / "dictado_es.wav")) as w:
         audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768

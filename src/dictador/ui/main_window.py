@@ -20,17 +20,17 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
-from dictado import commands
-from dictado.config import MODE_LABELS, MODES, Settings, localdata_dir, recovery_dir
-from dictado.doc import storage
-from dictado.doc.model import DocumentModel
-from dictado.engine import DictationEngine
-from dictado.llm.queue import CorrectionJob, CorrectionQueue
-from dictado.ui.dialogs import DiffDialog, GlossaryDialog
-from dictado.ui.editor import DictationEditor
-from dictado.ui.theme import THEME_LABELS, THEMES, apply_theme
+from dictador import commands
+from dictador.config import MODE_LABELS, MODES, Settings, localdata_dir, recovery_dir
+from dictador.doc import storage
+from dictador.doc.model import DocumentModel
+from dictador.engine import DictationEngine
+from dictador.llm.queue import CorrectionJob, CorrectionQueue
+from dictador.ui.dialogs import DiffDialog, GlossaryDialog
+from dictador.ui.editor import DictationEditor
+from dictador.ui.theme import THEME_LABELS, THEMES, apply_theme
 
-FILE_FILTER = "Proyecto de Dictado (*.dictado)"
+FILE_FILTER = "Documento de Dictador (*.dictador *.dictado)"
 
 
 class MainWindow(QMainWindow):
@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
         self.act_retry = self._action("&Reintentar los párrafos sin corregir", self.retry_failed)
 
     def _build_toolbar(self) -> None:
-        bar = QToolBar("Dictado", self)
+        bar = QToolBar("Dictador", self)
         bar.setMovable(False)
         bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.addToolBar(bar)
@@ -172,7 +172,7 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.act_quit)
 
-        self.dictate_menu = menu.addMenu("&Dictado")
+        self.dictate_menu = menu.addMenu("&Dictador")
         self.dictate_menu.addActions([self.act_dictate, self.act_paragraph])
 
         self.doc_menu = menu.addMenu("D&ocumento")
@@ -215,7 +215,7 @@ class MainWindow(QMainWindow):
         """Hook para el asistente de primer arranque (fase 4). Sin modelos no se puede dictar."""
         if self.fake_asr:
             return True
-        from dictado.engine import models_present
+        from dictador.engine import models_present
 
         if models_present(self.settings.models_path()):
             return True
@@ -223,10 +223,10 @@ class MainWindow(QMainWindow):
         return models_present(self.settings.models_path())
 
     def open_models(self, first_run: bool = False) -> None:
-        from dictado.engine import models_present
-        from dictado.ui.models_dialog import ModelsDialog
+        from dictador.engine import models_present
+        from dictador.ui.models_dialog import ModelsDialog
 
-        from dictado.models.download import LLM_PACKS, pack_present
+        from dictador.models.download import LLM_PACKS, pack_present
 
         s = self.settings
         had_voice = models_present(s.models_path())
@@ -298,7 +298,7 @@ class MainWindow(QMainWindow):
     def _on_engine_error(self, message: str) -> None:
         self.statusBar().showMessage(message, 10_000)
         if not self.engine.running:
-            QMessageBox.critical(self, "Dictado", message)
+            QMessageBox.critical(self, "Dictador", message)
 
     def _on_asr_busy(self, pending: int) -> None:
         if self.engine.running:
@@ -308,14 +308,14 @@ class MainWindow(QMainWindow):
 
     def _update_title(self) -> None:
         name = self.path.name if self.path else "Sin título"
-        self.setWindowTitle(f"{'*' if self.model.modified else ''}{name} — Dictado")
+        self.setWindowTitle(f"{'*' if self.model.modified else ''}{name} — Dictador")
 
     def maybe_save(self) -> bool:
         if not self.model.modified:
             return True
         answer = QMessageBox.question(
             self,
-            "Dictado",
+            "Dictador",
             "El documento tiene cambios sin guardar. ¿Guardarlos?",
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
         )
@@ -367,7 +367,7 @@ class MainWindow(QMainWindow):
         return self._save_to(self.path)
 
     def file_save_as(self) -> bool:
-        start = str(self.path) if self.path else "documento.dictado"
+        start = str(self.path) if self.path else "documento.dictador"
         name, _ = QFileDialog.getSaveFileName(self, "Guardar proyecto", start, FILE_FILTER)
         if not name:
             return False
@@ -448,7 +448,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _recovery_files() -> tuple[Path, Path]:
         d = recovery_dir()
-        return d / "recuperacion.dictado", d / "recuperacion.json"
+        return d / "recuperacion.dictador", d / "recuperacion.json"
 
     def autosave(self) -> None:
         if not self.model.modified:
@@ -472,7 +472,7 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             "Recuperar",
-            "Dictado no se cerró bien la última vez. ¿Recuperar el documento autoguardado?",
+            "Dictador no se cerró bien la última vez. ¿Recuperar el documento autoguardado?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if answer != QMessageBox.StandardButton.Yes:
@@ -508,7 +508,7 @@ class MainWindow(QMainWindow):
     def configure_llm(self) -> None:
         s = self.settings
         if self.fake_llm:
-            from dictado.llm.client import FakeLLMClient
+            from dictador.llm.client import FakeLLMClient
 
             self._stop_server()
             self.corrector.set_client(FakeLLMClient())
@@ -516,7 +516,7 @@ class MainWindow(QMainWindow):
             self._configure_managed()
         elif s.llm_base_url and s.llm_model:
             self._stop_server()
-            from dictado.llm.client import LLMClient
+            from dictador.llm.client import LLMClient
 
             self.corrector.set_client(
                 LLMClient(
@@ -528,10 +528,10 @@ class MainWindow(QMainWindow):
             self.corrector.set_client(None)
 
     def _configure_managed(self) -> None:
-        from dictado.llm.client import LLMClient
-        from dictado.llm.managed import ManagedServer
+        from dictador.llm.client import LLMClient
+        from dictador.llm.managed import ManagedServer
 
-        from dictado.models.download import builtin_model, builtin_server
+        from dictador.models.download import builtin_model, builtin_server
 
         s = self.settings
         exe = s.managed_server_path or str(builtin_server(s.models_path()))
@@ -659,7 +659,7 @@ class MainWindow(QMainWindow):
             self.model.set_modified(True)
 
     def open_settings(self) -> None:
-        from dictado.ui.settings import SettingsDialog
+        from dictador.ui.settings import SettingsDialog
 
         dialog = SettingsDialog(self.settings, self, fake_llm=self.fake_llm)
         if not dialog.exec():

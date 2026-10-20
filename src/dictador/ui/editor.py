@@ -21,7 +21,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QMenu, QTextEdit, QToolTip
 
-from dictado.doc.model import DocumentModel, Paragraph
+from dictador.doc.model import DocumentModel, Paragraph
 
 LINE_SEP = " "  # salto de línea dentro de un bloque (versos)
 MARGIN = 26

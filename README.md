@@ -1,4 +1,4 @@
-# Dictado
+# Dictador
 
 Aplicación de escritorio para Windows 10/11 para **dictar por voz a un documento**, todo en local y sin conexión
 (salvo la descarga inicial de modelos). Parakeet TDT 0.6B v3 transcribe frase a frase en la CPU y un LLM pequeño
@@ -31,7 +31,7 @@ Micrófono → Silero VAD → frases (pausa corta) → Parakeet → editor
 En **Herramientas › Ajustes › Corrector** se elige:
 
 - **Integrado:** Qwen3.5 2B con llama-server, en la **CPU** (RAM) o en la **GPU** (Vulkan). Los dos se descargan desde
-  **Herramientas › Modelos** (≈1,3 GB) y Dictado arranca y para el servidor solo. Medido en un Ryzen 7 7800X3D:
+  **Herramientas › Modelos** (≈1,3 GB) y Dictador arranca y para el servidor solo. Medido en un Ryzen 7 7800X3D:
   un párrafo de 63 palabras en ~2 s en CPU.
 - **Servidor externo:** cualquier endpoint compatible con OpenAI (Ollama, llama-swap, llama-server, LM Studio),
   local o en otro equipo, con URL, modelo y clave. Ver [docs/LLM.md](docs/LLM.md).
@@ -57,16 +57,16 @@ pausa larga (ajustable), «punto y aparte» o `Ctrl+Intro`.
 ## Diagnóstico
 
 Ajustes › Dictado › «Guardar el audio de cada sesión» graba el audio y la probabilidad de voz de cada trama en
-`%LOCALAPPDATA%\Dictado\diagnostico`. Con `dictado --transcribe sesion.wav` se puede repetir el corte y la
+`%LOCALAPPDATA%\Dictador\diagnostico`. Con `dictador --transcribe sesion.wav` se puede repetir el corte y la
 transcripción sin micrófono.
 
 ## Archivos
 
-- Proyecto `.dictado` (JSON): todos los párrafos con original, corrección y estado. Al reabrirlo, el dictado sigue al
+- Proyecto `.dictador` (JSON): todos los párrafos con original, corrección y estado. Al reabrirlo, el dictado sigue al
   final.
 - Exportar a `.docx`, `.md` y `.txt`; importar `.txt` y `.md`.
 - Autoguardado de recuperación cada 60 s.
-- Modelos en `%LOCALAPPDATA%\Dictado\models`; ajustes en `%APPDATA%\Dictado\config.json`.
+- Modelos en `%LOCALAPPDATA%\Dictador\models`; ajustes en `%APPDATA%\Dictador\config.json`.
 
 ## Atajos
 
@@ -82,19 +82,19 @@ transcripción sin micrófono.
 
 ```sh
 uv sync
-uv run dictado                          # la app
-uv run dictado --fake-asr --fake-llm    # sin micrófono, modelos ni LLM
-uv run dictado --transcribe audio.wav   # diagnóstico: VAD + Parakeet sobre un .wav de 16 kHz mono
+uv run dictador                          # la app
+uv run dictador --fake-asr --fake-llm    # sin micrófono, modelos ni LLM
+uv run dictador --transcribe audio.wav   # diagnóstico: VAD + Parakeet sobre un .wav de 16 kHz mono
 uv run pytest                           # tests
 ```
 
 ## Ejecutable
 
 ```sh
-uv run pyinstaller dictado.spec --noconfirm
+uv run pyinstaller dictador.spec --noconfirm
 ```
 
-Genera `dist/Dictado/Dictado.exe` (~200 MB, sin modelos: se descargan desde la propia app la primera vez).
+Genera `dist/Dictador/Dictador.exe` (~200 MB, sin modelos: se descargan desde la propia app la primera vez).
 
 ## Licencias de los modelos
 

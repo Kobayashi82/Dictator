@@ -10,7 +10,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from dictado.llm.guard import levenshtein
+from dictador.llm.guard import levenshtein
 
 
 @dataclass

@@ -1,4 +1,4 @@
-"""Guardar y abrir proyectos `.dictado`, exportar e importar."""
+"""Guardar y abrir documentos `.dictador` (y los antiguos `.dictado`), exportar e importar."""
 
 from __future__ import annotations
 
@@ -8,11 +8,12 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from dictado.doc.model import Paragraph
+from dictador.doc.model import Paragraph
 
-FORMAT = "dictado"
+FORMAT = "dictador"
+OLD_FORMATS = ("dictado",)  # versiones anteriores del programa, que se llamaba «Dictado»
 VERSION = 1
-EXTENSION = ".dictado"
+EXTENSION = ".dictador"
 
 
 class StorageError(Exception):
@@ -62,10 +63,10 @@ def load(path: str | Path) -> tuple[list[Paragraph], str, list[str]]:
         raise StorageError(f"No se puede leer el archivo: {e}") from e
     except ValueError as e:
         raise StorageError(f"El archivo no es un proyecto válido: {e}") from e
-    if not isinstance(data, dict) or data.get("format") != FORMAT:
-        raise StorageError("El archivo no es un proyecto de Dictado.")
+    if not isinstance(data, dict) or data.get("format") not in (FORMAT, *OLD_FORMATS):
+        raise StorageError("El archivo no es un documento de Dictador.")
     if int(data.get("version", 0)) > VERSION:
-        raise StorageError("El proyecto es de una versión más nueva de Dictado.")
+        raise StorageError("El proyecto es de una versión más nueva de Dictador.")
     paragraphs = [Paragraph.from_dict(p) for p in data.get("paragraphs", []) if isinstance(p, dict)]
     return paragraphs, data.get("mode", "prosa"), list(data.get("glossary", []))
 
