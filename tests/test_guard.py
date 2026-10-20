@@ -163,3 +163,10 @@ def test_notes_spoken_numbering_is_not_a_change():
     out = "Para mañana:\n- Comprar pan y leche.\n- Llamar al fontanero.\n- Enviar el informe a Marta."
     assert validate(raw, out, "notas").ok
     assert not validate(raw, "Para mañana:\n- Comprar pan.", "notas").ok
+
+
+def test_custom_prompt_replaces_preset_but_keeps_glossary():
+    msgs = build_messages("prosa", "texto", [], ["Macondo"], prompt="Corrige solo las tildes.")
+    assert msgs[0]["content"].startswith("Corrige solo las tildes.")
+    assert "Macondo" in msgs[0]["content"] and "Eres un corrector" not in msgs[0]["content"]
+    assert build_messages("prosa", "texto", [], [], prompt="  ")[0]["content"].startswith("Eres un corrector")

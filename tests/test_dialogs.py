@@ -96,3 +96,19 @@ def test_settings_wheel_scrolls_page_not_controls(app):
         app.sendEvent(widget, event)
         assert not event.isAccepted()  # pasa a la página, que se desplaza
     assert (combo.currentIndex(), spin.value()) == before
+
+
+def test_settings_custom_prompt_edit_and_restore(app):
+    from dictador.llm.prompts import PRESETS
+    from dictador.ui.settings import SettingsDialog
+
+    original = Settings(custom_prompts={"poesia": "Corrige solo las tildes."})
+    dialog = SettingsDialog(original)
+    assert dialog.result_settings() == original
+    assert dialog.prompt.toPlainText() == PRESETS["prosa"] and not dialog.prompt_reset.isEnabled()
+    dialog.prompt.setPlainText("Corrige como un profesor de lengua.")
+    dialog.prompt_mode.setCurrentIndex(dialog.prompt_mode.findData("poesia"))
+    assert dialog.prompt.toPlainText() == "Corrige solo las tildes." and dialog.prompt_reset.isEnabled()
+    dialog.prompt_reset.click()
+    assert dialog.prompt.toPlainText() == PRESETS["poesia"]
+    assert dialog.result_settings().custom_prompts == {"prosa": "Corrige como un profesor de lengua."}

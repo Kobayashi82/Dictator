@@ -32,6 +32,7 @@ from dictador.ui.widgets import Badge, Combo, SegmentedControl, Switch
 FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 36)
 PARAGRAPH_PAUSES = [("1800", "Corta", "Unos 2 segundos de silencio"), ("2500", "Normal", "Unos 2,5 segundos"),
                     ("4000", "Larga", "Unos 4 segundos")]
+PROMPT_MODES = [("prosa", "Modo Texto"), ("poesia", "Modo Poesía"), ("notas", "Modo Lista")]
 
 
 def _closest(value: int, options: list[tuple[str, str, str]]) -> str:
@@ -314,6 +315,35 @@ class SettingsDialog(QDialog):
         self.glossary.setPlaceholderText("Un nombre por línea")
         self.glossary.setFixedHeight(120)
         form.addRow(label("Nombres para todos\nlos documentos"), self.glossary)
+
+        # Instrucciones del corrector (system prompt), una por modo.
+        from dictador.llm.prompts import PRESETS
+
+        self._presets = PRESETS
+        self._prompts = {m: s.custom_prompts.get(m, "").strip() or PRESETS[m] for m in PRESETS}
+        self.prompt_mode = Combo()
+        for key, text in PROMPT_MODES:
+            self.prompt_mode.addItem(text, key)
+        self._prompt_shown = self.prompt_mode.currentData()
+        self.prompt_mode.currentIndexChanged.connect(self._show_prompt)
+        self.prompt_reset = QPushButton("Restaurar el original")
+        self.prompt_reset.setProperty("small", True)
+        self.prompt_reset.clicked.connect(self._reset_prompt)
+        head = QHBoxLayout()
+        head.addWidget(self.prompt_mode, 1)
+        head.addWidget(self.prompt_reset)
+        form.addRow(label("Instrucciones del\ncorrector"), head)
+        self.prompt = QPlainTextEdit(self._prompts[self._prompt_shown])
+        self.prompt.setFont(style.ui_font(11.5))
+        self.prompt.setFixedHeight(260)
+        self.prompt.textChanged.connect(self._prompt_edited)
+        form.addRow(self.prompt)
+        self.prompt_note = QLabel()
+        self.prompt_note.setFont(style.ui_font(11))
+        self.prompt_note.setProperty("soft", True)
+        self.prompt_note.setWordWrap(True)
+        form.addRow(self.prompt_note)
+        self._prompt_edited()
         self.advanced.hide()
         self.body.addWidget(self.advanced)
 
@@ -323,6 +353,26 @@ class SettingsDialog(QDialog):
         show = self.advanced.isHidden()
         self.advanced.setVisible(show)
         self.more.setText("Ocultar las opciones avanzadas" if show else "Mostrar las opciones avanzadas")
+
+    def _show_prompt(self) -> None:
+        self._prompts[self._prompt_shown] = self.prompt.toPlainText()
+        self._prompt_shown = self.prompt_mode.currentData()
+        self.prompt.setPlainText(self._prompts[self._prompt_shown])
+
+    def _reset_prompt(self) -> None:
+        self.prompt.setPlainText(self._presets[self._prompt_shown])
+
+    def _prompt_edited(self) -> None:
+        changed = self.prompt.toPlainText().strip() != self._presets[self._prompt_shown].strip()
+        self.prompt_reset.setEnabled(changed)
+        self.prompt_note.setText(
+            ("Modificadas por usted. " if changed else "Son las de serie. ")
+            + "El glosario y los párrafos anteriores se añaden solos. Afecta a lo que se corrija a partir de ahora."
+        )
+
+    def _custom_prompts(self) -> dict[str, str]:
+        self._prompts[self._prompt_shown] = self.prompt.toPlainText()
+        return {m: t.strip() for m, t in self._prompts.items() if t.strip() and t.strip() != self._presets[m].strip()}
 
     def _models_dir(self) -> Path:
         text = self.models_dir.text().strip()
@@ -380,4 +430,5 @@ class SettingsDialog(QDialog):
             models_dir=self.models_dir.text().strip(),
             save_session_audio=self.save_audio.isChecked(),
             glossary=glossary,
+            custom_prompts=self._custom_prompts(),
         )

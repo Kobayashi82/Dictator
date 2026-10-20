@@ -48,8 +48,10 @@ PRESETS = {
 }
 
 
-def build_messages(mode: str, target: str, context: list[str], glossary: list[str]) -> list[dict]:
-    system = PRESETS[mode]
+def build_messages(mode: str, target: str, context: list[str], glossary: list[str], prompt: str = "") -> list[dict]:
+    """`prompt`: instrucciones propias del usuario para este modo (vacío: las de serie). El glosario, el contexto y
+    las pistas de repeticiones se añaden igual."""
+    system = prompt.strip() or PRESETS[mode]
     terms = [t.strip() for t in glossary if t.strip()]
     if terms:
         system += (

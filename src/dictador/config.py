@@ -81,6 +81,7 @@ class Settings:
     guard_max_length_change: float = 0.25
     guard_max_removed: float = 0.35  # en prosa: lo que puede quitar al limpiar titubeos
     glossary: list[str] = field(default_factory=list)
+    custom_prompts: dict[str, str] = field(default_factory=dict)  # modo → instrucciones propias (si no, las de serie)
     highlight_changes: bool = False  # mostrar marcas y cambios del corrector (vista avanzada)
 
     # Corrector integrado (llama-server propio; rutas vacías = lo descargado en la carpeta de modelos)
@@ -113,6 +114,8 @@ class Settings:
             settings.models_dir = str(localdata_dir()) + settings.models_dir[len(old) :]
         if settings.mode not in MODES:
             settings.mode = "prosa"
+        if not isinstance(settings.custom_prompts, dict):
+            settings.custom_prompts = {}
         return settings
 
     def save(self, path: Path | None = None) -> None:

@@ -23,6 +23,7 @@ class CorrectionJob:
     max_distance: float = 0.2
     max_length_change: float = 0.25
     max_removed: float = 0.35
+    prompt: str = ""  # instrucciones propias (vacío: las de serie)
 
 
 class CorrectionQueue(QObject):
@@ -119,7 +120,7 @@ class CorrectionQueue(QObject):
             self.status.emit("corrigiendo", str(self.pending()))
             corrected, reason = None, ""
             try:
-                messages = build_messages(job.mode, job.raw, job.context, job.glossary)
+                messages = build_messages(job.mode, job.raw, job.context, job.glossary, job.prompt)
                 output = client.complete(messages, max_tokens_for(job.raw, job.mode))
                 result = guard.validate(
                     job.raw, output, job.mode, job.max_distance, job.max_length_change, job.max_removed

@@ -757,6 +757,7 @@ class MainWindow(QMainWindow):
                 max_distance=s.guard_max_distance,
                 max_length_change=s.guard_max_length_change,
                 max_removed=s.guard_max_removed,
+                prompt=s.custom_prompts.get(p.mode, ""),
             )
         )
 
